@@ -1,0 +1,3 @@
+chess-server/build/
+chess-server/server
+*.log
