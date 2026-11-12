@@ -9,16 +9,72 @@
 #include <functional> // ← MỚI: std::function, dùng để lưu hàm vào bảng
 #include <map>        // ← MỚI
 #include <string>     // ← MỚI
+#include <sys/time.h> // ← MỚI: gettimeofday (lấy giờ có mili giây)
+#include <ctime>      // ← MỚI: strftime (định dạng ngày giờ)
 
 const size_t MAX_LINE = 512; // một dòng dài tối đa 512 byte (theo design)
 
-// ---------- Gửi ----------
-// Gửi 1 dòng về client, tự thêm '\n' ở cuối
-void sendLine(int fd, const std::string &msg)
+struct Client
 {
-  std::string data = msg + "\n";
-  send(fd, data.c_str(), data.size(), 0);
-  printf("fd=%d SEND: %s\n", fd, msg.c_str());
+  int fd;
+  std::string addr;   // "127.0.0.1:51144", để ghi log
+  std::string buffer; // bộ đệm nhận (từ bước 1.3)
+  // sau này thêm: std::string user; trạng thái; ...
+};
+
+std::map<int, Client> clients; // fd → Client. Đưa ra ngoài main để các hàm khác dùng được
+
+// ---------- Logger ----------
+FILE *logFile = nullptr; // file server.log, mở ở đầu main()
+
+// Trả về giờ hiện tại dạng "2026-11-12 23:28:17.779"
+std::string now()
+{
+  timeval tv;
+  gettimeofday(&tv, nullptr); // lấy giờ (giây + micro giây)
+  tm t;
+  localtime_r(&tv.tv_sec, &t); // đổi sang giờ địa phương
+  char buf[64];
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
+  char out[80];
+  snprintf(out, sizeof(out), "%s.%03ld", buf, (long)(tv.tv_usec / 1000)); // thêm mili giây
+  return out;
+}
+
+// tag: CONN / RECV / SEND / DISC
+void logMsg(const std::string &tag, const Client &c, const std::string &text)
+{
+  std::string line = now() + " " + tag + " fd=" + std::to_string(c.fd) +
+                     " " + c.addr + " : " + text;
+  printf("%s\n", line.c_str()); // ra terminal
+  fflush(stdout);
+  if (logFile)
+  {
+    fprintf(logFile, "%s\n", line.c_str()); // ra file
+    fflush(logFile);                        // ghi xuống đĩa ngay, server chết đột ngột vẫn còn log
+  }
+}
+
+// ---------- Gửi ----------
+// send() có thể chỉ gửi được một phần, nên phải lặp đến khi hết
+bool sendAll(int fd, const std::string &data)
+{
+  size_t sent = 0;
+  while (sent < data.size())
+  {
+    ssize_t r = send(fd, data.c_str() + sent, data.size() - sent, MSG_NOSIGNAL);
+    if (r <= 0)
+      return false; // lỗi (client đã ngắt...)
+    sent += r;
+  }
+  return true;
+}
+
+// CHỖ GỬI DUY NHẤT của cả server: ghi log rồi gửi
+void sendMsg(Client &c, const std::string &msg)
+{
+  logMsg("SEND", c, msg);
+  sendAll(c.fd, msg + "\n");
 }
 
 // ---------- Cắt trường ----------
@@ -37,12 +93,12 @@ std::vector<std::string> splitFields(const std::string &line)
 }
 
 // ---------- Các hàm xử lý lệnh ----------
-using Fields = std::vector<std::string>;                      // đặt tên ngắn cho dễ đọc
-using Handler = std::function<void(int fd, const Fields &f)>; // "kiểu" của một hàm xử lý
+using Fields = std::vector<std::string>;                         // đặt tên ngắn cho dễ đọc
+using Handler = std::function<void(Client &c, const Fields &f)>; // ← đổi int fd → Client& c
 
-void handlePing(int fd, const Fields &f)
-{
-  sendLine(fd, "200|PING");
+void handlePing(Client &c, const Fields &f)
+{                         // ← đổi
+  sendMsg(c, "200|PING"); // ← sendLine(fd,...) → sendMsg(c,...)
 }
 
 // ---------- Bảng lệnh ----------
@@ -53,24 +109,25 @@ const std::map<std::string, Handler> HANDLERS = {
 
 // ---------- Dispatcher ----------
 // Được gọi mỗi khi tách được 1 dòng hoàn chỉnh (từ bước 1.3)
-void handleLine(int fd, const std::string &line)
-{
-  printf("fd=%d RECV: %s\n", fd, line.c_str());
+void handleLine(Client &c, const std::string &line)
+{                          // ← đổi
+  logMsg("RECV", c, line); // ← printf → logMsg
   if (line.empty())
-    return; // dòng rỗng (lỡ bấm Enter) thì bỏ qua
+    return;
 
   Fields f = splitFields(line);
-  auto it = HANDLERS.find(f[0]); // f[0] là tên lệnh
+  auto it = HANDLERS.find(f[0]);
   if (it == HANDLERS.end())
-  { // không có trong bảng
-    sendLine(fd, "400|ERROR|UNKNOWN_COMMAND");
+  {
+    sendMsg(c, "400|ERROR|UNKNOWN_COMMAND"); // ← đổi
     return;
   }
-  it->second(fd, f); // it->second chính là hàm xử lý, gọi nó
+  it->second(c, f); // ← đổi
 }
 
 int main()
 {
+  logFile = fopen("server.log", "a"); // "a" = append, ghi nối vào cuối file
   int listenFd = socket(AF_INET, SOCK_STREAM, 0);
 
   // MỚI: cho phép chạy lại server ngay sau khi tắt,
@@ -86,8 +143,6 @@ int main()
   listen(listenFd, 16);
   printf("Server listening on port 5500\n");
 
-  std::map<int, std::string> clients; // fd → bộ đệm của client đó
-
   while (true)
   {
     // 1. Gom danh sách socket cần theo dõi
@@ -96,7 +151,7 @@ int main()
     FD_SET(listenFd, &readfds); // theo dõi socket lễ tân
     int maxfd = listenFd;
 
-    for (auto &[fd, buffer] : clients)
+    for (auto &[fd, c] : clients)
     { // ← đổi: duyệt cặp (fd, buffer)
       FD_SET(fd, &readfds);
       maxfd = std::max(maxfd, fd);
@@ -108,16 +163,20 @@ int main()
     // 3. Socket lễ tân sẵn sàng = có người mới kết nối
     if (FD_ISSET(listenFd, &readfds))
     {
-      int fd = accept(listenFd, nullptr, nullptr);
-      // clients.push_back(fd);
-      clients[fd] = "";
-      printf("Client connected, fd=%d\n", fd);
+      sockaddr_in ca{}; // ← MỚI: chỗ chứa địa chỉ client
+      socklen_t len = sizeof(ca);
+      int fd = accept(listenFd, (sockaddr *)&ca, &len); // ← trước đây là nullptr, nullptr
+      Client c;
+      c.fd = fd;
+      c.addr = std::string(inet_ntoa(ca.sin_addr)) + ":" + std::to_string(ntohs(ca.sin_port));
+      clients[fd] = c;
+      logMsg("CONN", clients[fd], "connected");
     }
 
     // 4. Client nào sẵn sàng thì đọc client đó
     std::vector<int> closed; // những client ngắt trong vòng này
-    for (auto &[fd, buffer] : clients)
-    {
+    for (auto &[fd, c] : clients)
+    { // ← buffer → c
       if (!FD_ISSET(fd, &readfds))
         continue;
 
@@ -125,32 +184,27 @@ int main()
       ssize_t r = recv(fd, buf, sizeof(buf), 0);
       if (r <= 0)
       {
-        printf("Client fd=%d disconnected\n", fd);
+        logMsg("DISC", c, "disconnected"); // ← printf → logMsg
         close(fd);
         closed.push_back(fd);
         continue;
       }
-      printf("fd=%d recv %zd bytes\n", fd, r); // in ra để thấy mỗi lần recv nhận bao nhiêu
+      c.buffer.append(buf, r); // ← buffer → c.buffer (cả dưới nữa)
 
-      // (a) nối dữ liệu mới vào cuối bộ đệm
-      buffer.append(buf, r);
-
-      // (b) còn '\n' thì cắt ra từng dòng
       size_t pos;
-      while ((pos = buffer.find('\n')) != std::string::npos)
+      while ((pos = c.buffer.find('\n')) != std::string::npos)
       {
-        std::string line = buffer.substr(0, pos); // phần trước '\n'
-        buffer.erase(0, pos + 1);                 // xóa dòng đó (kèm '\n') khỏi bộ đệm
-        if (!line.empty() && line.back() == '\r') // gõ từ telnet/Windows có "\r\n"
-          line.pop_back();                        //   → bỏ '\r' ở cuối
-        handleLine(fd, line);
+        std::string line = c.buffer.substr(0, pos);
+        c.buffer.erase(0, pos + 1);
+        if (!line.empty() && line.back() == '\r')
+          line.pop_back();
+        handleLine(c, line); // ← truyền c thay vì fd
       }
 
-      // (c) chống client gửi mãi không có '\n' làm đầy bộ nhớ
-      if (buffer.size() > MAX_LINE)
+      if (c.buffer.size() > MAX_LINE)
       {
-        printf("fd=%d line too long, dropped\n", fd);
-        buffer.clear();
+        c.buffer.clear();
+        sendMsg(c, "400|ERROR|LINE_TOO_LONG"); // ← giờ trả lỗi cho client, đúng design
       }
     }
 
@@ -160,9 +214,8 @@ int main()
   }
 }
 
-// Bước 1.4: Dispatcher, server bắt đầu trả lời
+// Bước 1.5: Struct Client + gửi an toàn + Logger
 
-// Tới giờ server mới chỉ in ra các dòng nhận được. Giờ nó phải hiểu và trả lời theo từng lệnh
-
-// "PING"         → cắt theo '|' → ["PING"]        → tìm "PING" trong bảng → handlePing  → gửi "200|PING"
-// "HELLO"        → cắt theo '|' → ["HELLO"]       → không có trong bảng                → gửi "400|ERROR|UNKNOWN_COMMAND"
+// Mỗi client chỉ có fd và bộ đệm. Sau này cần thêm địa chỉ IP, tên user, trạng thái... -->	Gom hết vào struct Client
+// send() có thể chỉ gửi được một phần dữ liệu (vòng lặp nLeft trong bài giảng) --> Hàm sendAll lặp cho đến khi gửi hết
+// Log chỉ in ra màn hình, không có giờ, không có IP. Đề bài yêu cầu log mọi bản tin (1 điểm) --> Hàm logMsg: có giờ đến mili giây, có IP:port, ghi cả ra file server.log
