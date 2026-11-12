@@ -4,17 +4,69 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <cstdio>
-#include <vector>    // ← MỚI: danh sách client
-#include <algorithm> // ← MỚI: std::max, std::find
-#include <map>       // ← MỚI
-#include <string>    // ← MỚI
+#include <vector>     // ← MỚI: danh sách client
+#include <algorithm>  // ← MỚI: std::max, std::find
+#include <functional> // ← MỚI: std::function, dùng để lưu hàm vào bảng
+#include <map>        // ← MỚI
+#include <string>     // ← MỚI
 
 const size_t MAX_LINE = 512; // một dòng dài tối đa 512 byte (theo design)
 
-// Được gọi mỗi khi tách được 1 dòng hoàn chỉnh
+// ---------- Gửi ----------
+// Gửi 1 dòng về client, tự thêm '\n' ở cuối
+void sendLine(int fd, const std::string &msg)
+{
+  std::string data = msg + "\n";
+  send(fd, data.c_str(), data.size(), 0);
+  printf("fd=%d SEND: %s\n", fd, msg.c_str());
+}
+
+// ---------- Cắt trường ----------
+// "LOGIN|alice|123" → {"LOGIN", "alice", "123"}
+std::vector<std::string> splitFields(const std::string &line)
+{
+  std::vector<std::string> fields;
+  size_t start = 0, pos;
+  while ((pos = line.find('|', start)) != std::string::npos)
+  {
+    fields.push_back(line.substr(start, pos - start)); // lấy đoạn trước '|'
+    start = pos + 1;                                   // nhảy qua '|'
+  }
+  fields.push_back(line.substr(start)); // đoạn cuối cùng
+  return fields;
+}
+
+// ---------- Các hàm xử lý lệnh ----------
+using Fields = std::vector<std::string>;                      // đặt tên ngắn cho dễ đọc
+using Handler = std::function<void(int fd, const Fields &f)>; // "kiểu" của một hàm xử lý
+
+void handlePing(int fd, const Fields &f)
+{
+  sendLine(fd, "200|PING");
+}
+
+// ---------- Bảng lệnh ----------
+const std::map<std::string, Handler> HANDLERS = {
+    {"PING", handlePing},
+    // sau này: {"REGISTER", handleRegister}, {"LOGIN", handleLogin}, ...
+};
+
+// ---------- Dispatcher ----------
+// Được gọi mỗi khi tách được 1 dòng hoàn chỉnh (từ bước 1.3)
 void handleLine(int fd, const std::string &line)
 {
-  printf("fd=%d line: [%s]\n", fd, line.c_str());
+  printf("fd=%d RECV: %s\n", fd, line.c_str());
+  if (line.empty())
+    return; // dòng rỗng (lỡ bấm Enter) thì bỏ qua
+
+  Fields f = splitFields(line);
+  auto it = HANDLERS.find(f[0]); // f[0] là tên lệnh
+  if (it == HANDLERS.end())
+  { // không có trong bảng
+    sendLine(fd, "400|ERROR|UNKNOWN_COMMAND");
+    return;
+  }
+  it->second(fd, f); // it->second chính là hàm xử lý, gọi nó
 }
 
 int main()
@@ -108,10 +160,9 @@ int main()
   }
 }
 
-// Bước này giải quyết vấn đề ở thí nghiệm: TCP có thể đưa bản tin dính nhau (hello\nPING\n trong 1 lần recv) hoặc cắt đôi (PI rồi NG\n ở 2 lần recv).
+// Bước 1.4: Dispatcher, server bắt đầu trả lời
 
-// Cách giải nằm ở quy ước của giao thức: mỗi bản tin kết thúc bằng \n. Server làm 3 việc:
+// Tới giờ server mới chỉ in ra các dòng nhận được. Giờ nó phải hiểu và trả lời theo từng lệnh
 
-// Mỗi client có một bộ đệm (buffer) riêng
-// recv được bao nhiêu thì nối hết vào cuối bộ đệm
-// Trong bộ đệm còn \n thì cắt ra từng dòng. Phần chưa có \n để lại, chờ lần recv sau
+// "PING"         → cắt theo '|' → ["PING"]        → tìm "PING" trong bảng → handlePing  → gửi "200|PING"
+// "HELLO"        → cắt theo '|' → ["HELLO"]       → không có trong bảng                → gửi "400|ERROR|UNKNOWN_COMMAND"
