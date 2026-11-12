@@ -1,41 +1,83 @@
-#include <arpa/inet.h>  // htons
-#include <netinet/in.h> // sockaddr_in
-#include <sys/socket.h> // socket, bind, listen, accept, recv
-#include <unistd.h>     // close
-#include <cstdio>       // printf
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/select.h> // ← MỚI: select, fd_set
+#include <sys/socket.h>
+#include <unistd.h>
+#include <cstdio>
+#include <vector>    // ← MỚI: danh sách client
+#include <algorithm> // ← MỚI: std::max, std::find
 
 int main()
 {
-  // 1. Tạo socket TCP, nhận về một con số gọi là file descriptor (fd)
   int listenFd = socket(AF_INET, SOCK_STREAM, 0);
 
-  // 2. Gắn socket vào cổng 5500
-  sockaddr_in addr{};
-  addr.sin_family = AF_INET;         // IPv4
-  addr.sin_addr.s_addr = INADDR_ANY; // nhận kết nối từ mọi máy
-  addr.sin_port = htons(5500);       // htons: đổi số cổng sang thứ tự byte mạng
-  bind(listenFd, (sockaddr *)&addr, sizeof(addr));
+  // MỚI: cho phép chạy lại server ngay sau khi tắt,
+  // không bị lỗi "Address already in use"
+  int yes = 1;
+  setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
-  // 3. Bắt đầu nghe, tối đa 16 kết nối xếp hàng chờ
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = INADDR_ANY;
+  addr.sin_port = htons(5500);
+  bind(listenFd, (sockaddr *)&addr, sizeof(addr));
   listen(listenFd, 16);
   printf("Server listening on port 5500\n");
 
-  // 4. Đứng chờ cho đến khi có 1 client kết nối
-  int clientFd = accept(listenFd, nullptr, nullptr);
-  printf("Client connected, fd=%d\n", clientFd);
+  std::vector<int> clients; // danh sách fd của các client đang kết nối
 
-  // 5. Nhận gì in nấy, cho đến khi client ngắt
-  char buf[1024];
   while (true)
   {
-    ssize_t r = recv(clientFd, buf, sizeof(buf) - 1, 0); // đứng chờ dữ liệu
-    if (r <= 0)
-      break;       // 0 = client đóng kết nối, <0 = lỗi
-    buf[r] = '\0'; // thêm ký tự kết thúc chuỗi để printf được
-    printf("Received %zd bytes: %s", r, buf);
-  }
+    // 1. Gom danh sách socket cần theo dõi
+    fd_set readfds;
+    FD_ZERO(&readfds);          // xóa sạch danh sách
+    FD_SET(listenFd, &readfds); // theo dõi socket lễ tân
+    int maxfd = listenFd;
+    for (int fd : clients)
+    {
+      FD_SET(fd, &readfds);        // theo dõi từng client
+      maxfd = std::max(maxfd, fd); // select cần biết fd lớn nhất
+    }
 
-  printf("Client disconnected\n");
-  close(clientFd);
-  close(listenFd);
+    // 2. Chờ tới khi có socket nào đó sẵn sàng
+    select(maxfd + 1, &readfds, nullptr, nullptr, nullptr);
+
+    // 3. Socket lễ tân sẵn sàng = có người mới kết nối
+    if (FD_ISSET(listenFd, &readfds))
+    {
+      int fd = accept(listenFd, nullptr, nullptr);
+      clients.push_back(fd);
+      printf("Client connected, fd=%d\n", fd);
+    }
+
+    // 4. Client nào sẵn sàng thì đọc client đó
+    std::vector<int> closed; // những client ngắt trong vòng này
+    for (int fd : clients)
+    {
+      if (!FD_ISSET(fd, &readfds))
+        continue; // không có dữ liệu → bỏ qua
+
+      char buf[1024];
+      ssize_t r = recv(fd, buf, sizeof(buf) - 1, 0);
+      if (r <= 0)
+      { // client ngắt kết nối
+        printf("Client fd=%d disconnected\n", fd);
+        close(fd);
+        closed.push_back(fd);
+        continue;
+      }
+      buf[r] = '\0';
+      printf("fd=%d received %zd bytes: %s", fd, r, buf);
+    }
+
+    // 5. Xóa các client đã ngắt khỏi danh sách
+    for (int fd : closed)
+      clients.erase(std::find(clients.begin(), clients.end(), fd));
+  }
 }
+
+// Code cũ bị kẹt vì accept() và recv() đều đứng chờ. Đang chờ client 1 thì không làm được việc gì khác.
+
+// select() thay đổi cách chờ: thay vì chờ từng cái một, ta đưa cho nó cả danh sách socket và bảo “khi nào cái
+// nào có dữ liệu thì báo tôi”. Nó chờ một lần cho tất cả, rồi cho biết socket nào đã sẵn sàng. Lúc đó gọi accept()
+// hay recv() trên socket đó sẽ không bị chờ nữa, vì chắc chắn đã có dữ liệu.
