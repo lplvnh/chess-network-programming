@@ -1,6 +1,7 @@
 #include "auth.h"
 #include "store.h"
 #include <cctype> // isalnum
+#include "password.h"
 
 // Tên hợp lệ: 3–20 ký tự, chỉ gồm chữ, số, dấu _
 static bool validUser(const std::string &u)
@@ -45,7 +46,7 @@ void handleRegister(Client &c, const std::vector<std::string> &f)
   // 3. Lưu user mới
   User u;
   u.name = name;
-  u.pass = f[2];
+  u.pass = hashPassword(f[2]);
   g_users[name] = u;
 
   if (!storeSave())
@@ -71,7 +72,7 @@ void handleLogin(Client &c, const std::vector<std::string> &f)
 
   // 2. Tên và mật khẩu (sai cái nào cũng trả cùng một lỗi)
   auto it = g_users.find(name);
-  if (it == g_users.end() || it->second.pass != pass)
+  if (it == g_users.end() || !checkPassword(pass, it->second.pass))
   {
     sendMsg(c, "403|LOGIN|INVALID_CREDENTIALS");
     return;
