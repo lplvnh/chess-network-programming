@@ -64,6 +64,7 @@ static const std::map<std::string, Command> COMMANDS = {
     {"LOGIN", {handleLogin, NOT_LOGGED}},
     {"LOGOUT", {handleLogout, {S::IDLE, S::QUEUED, S::ROOM_WAITING}}},
     {"LIST_ONLINE", {handleListOnline, LOGGED_IN}},
+    {"LEADERBOARD", {handleLeaderboard, LOGGED_IN}},
 };
 void dispatch(Client &c, const std::string &line)
 {

@@ -5,3 +5,4 @@
 #include <vector>
 
 void handleListOnline(Client &c, const std::vector<std::string> &f);
+void handleLeaderboard(Client &c, const std::vector<std::string> &f); // ← THÊM
