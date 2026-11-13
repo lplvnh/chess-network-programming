@@ -30,6 +30,8 @@ static void handlePing(Client &c, const Fields &)
 static const std::map<std::string, Handler> HANDLERS = {
     {"PING", handlePing},
     {"REGISTER", handleRegister},
+    {"LOGIN", handleLogin},
+    {"LOGOUT", handleLogout},
 };
 
 void dispatch(Client &c, const std::string &line)

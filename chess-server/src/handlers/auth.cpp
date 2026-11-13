@@ -56,3 +56,46 @@ void handleRegister(Client &c, const std::vector<std::string> &f)
   }
   sendMsg(c, "200|REGISTER|" + name);
 }
+
+void handleLogin(Client &c, const std::vector<std::string> &f)
+{
+  // 1. Định dạng: LOGIN|user|pass|mode
+  if (f.size() != 4 || (f[3] != "RANDOM" && f[3] != "RANKED"))
+  {
+    sendMsg(c, "400|LOGIN|BAD_FORMAT");
+    return;
+  }
+  const std::string &name = f[1];
+  const std::string &pass = f[2];
+  const std::string &mode = f[3];
+
+  // 2. Tên và mật khẩu (sai cái nào cũng trả cùng một lỗi)
+  auto it = g_users.find(name);
+  if (it == g_users.end() || it->second.pass != pass)
+  {
+    sendMsg(c, "403|LOGIN|INVALID_CREDENTIALS");
+    return;
+  }
+
+  // 3. Đang online ở kết nối khác?
+  if (findByUser(name) != nullptr)
+  {
+    sendMsg(c, "409|LOGIN|ALREADY_ONLINE");
+    return;
+  }
+
+  // 4. Gắn user vào kết nối
+  c.user = name;
+  c.mode = mode;
+  c.state = ConnState::IDLE;
+  const User &u = it->second;
+  sendMsg(c, "200|LOGIN|" + u.name + "|" + std::to_string(u.rating) + "|" + mode);
+}
+
+void handleLogout(Client &c, const std::vector<std::string> &)
+{
+  sendMsg(c, "200|LOGOUT"); // gửi TRƯỚC khi xóa tên, để log còn ghi user=alice
+  c.user.clear();
+  c.mode.clear();
+  c.state = ConnState::CONNECTED;
+}

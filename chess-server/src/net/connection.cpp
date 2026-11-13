@@ -23,3 +23,12 @@ void sendMsg(Client &c, const std::string &msg)
   logMsg("SEND", c, msg);
   sendAll(c.fd, msg + "\n");
 }
+
+// Trả về con trỏ tới client đang đăng nhập bằng 'name', hoặc nullptr nếu không ai
+Client *findByUser(const std::string &name)
+{
+  for (auto &[fd, c] : clients)
+    if (c.user == name)
+      return &c; // &c = địa chỉ của c
+  return nullptr;
+}

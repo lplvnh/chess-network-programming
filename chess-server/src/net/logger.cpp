@@ -30,7 +30,8 @@ static std::string now()
 void logMsg(const std::string &tag, const Client &c, const std::string &text)
 {
   std::string line = now() + " " + tag + " fd=" + std::to_string(c.fd) +
-                     " " + c.addr + " : " + text;
+                     " " + c.addr +
+                     " user=" + (c.user.empty() ? "-" : c.user) + " : " + text;
   printf("%s\n", line.c_str()); // ra terminal
   fflush(stdout);
   if (logFile)
