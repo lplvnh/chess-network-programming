@@ -23,6 +23,21 @@ static Fields splitFields(const std::string &line)
   return fields;
 }
 
+// Tạo bản sao của dòng để GHI LOG, với mật khẩu đã che bằng ***
+static std::string maskForLog(const std::string &line)
+{
+  Fields f = splitFields(line);
+  if ((f[0] == "LOGIN" || f[0] == "REGISTER") && f.size() >= 3)
+  {
+    f[2] = "***"; // trường 2 = mật khẩu
+    std::string out = f[0];
+    for (size_t i = 1; i < f.size(); i++)
+      out += "|" + f[i]; // nối lại bằng '|'
+    return out;
+  }
+  return line; // lệnh khác → giữ nguyên
+}
+
 static void handlePing(Client &c, const Fields &)
 { // bỏ tên "f" vì không dùng → hết cảnh báo
   sendMsg(c, "200|PING");
@@ -49,7 +64,7 @@ static const std::map<std::string, Command> COMMANDS = {
 };
 void dispatch(Client &c, const std::string &line)
 {
-  logMsg("RECV", c, line);
+  logMsg("RECV", c, maskForLog(line));
   if (line.empty())
     return;
 
