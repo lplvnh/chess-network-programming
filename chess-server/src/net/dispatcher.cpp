@@ -2,6 +2,7 @@
 #include "logger.h"
 #include <vector>
 #include <functional>
+#include "auth.h"
 
 using Fields = std::vector<std::string>;
 using Handler = std::function<void(Client &c, const Fields &f)>;
@@ -28,6 +29,7 @@ static void handlePing(Client &c, const Fields &)
 
 static const std::map<std::string, Handler> HANDLERS = {
     {"PING", handlePing},
+    {"REGISTER", handleRegister},
 };
 
 void dispatch(Client &c, const std::string &line)
