@@ -47,5 +47,12 @@ void handleRegister(Client &c, const std::vector<std::string> &f)
   u.name = name;
   u.pass = f[2];
   g_users[name] = u;
+
+  if (!storeSave())
+  {                      // ghi file thất bại
+    g_users.erase(name); // hủy luôn trong RAM, để RAM và file khớp nhau
+    sendMsg(c, "500|REGISTER|SERVER_ERROR");
+    return;
+  }
   sendMsg(c, "200|REGISTER|" + name);
 }

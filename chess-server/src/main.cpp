@@ -2,6 +2,7 @@
 #include "logger.h"
 #include "framer.h"
 #include "dispatcher.h"
+#include "store.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -15,6 +16,8 @@
 int main()
 {
   logOpen("server.log");
+  storeLoad("users.txt");
+  printf("Loaded %zu users\n", g_users.size());
   int listenFd = socket(AF_INET, SOCK_STREAM, 0);
 
   // MỚI: cho phép chạy lại server ngay sau khi tắt,

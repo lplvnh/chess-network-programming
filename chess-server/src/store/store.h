@@ -13,3 +13,6 @@ struct User
 
 // tên user → thông tin user
 extern std::map<std::string, User> g_users;
+
+bool storeLoad(const std::string &path); // đọc file vào g_users; false nếu chưa có file
+bool storeSave();                        // ghi g_users ra file; false nếu lỗi
