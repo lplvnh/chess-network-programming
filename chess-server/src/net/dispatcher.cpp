@@ -3,6 +3,7 @@
 #include <vector>
 #include <functional>
 #include "auth.h"
+#include <set> // std::set: tập hợp, không trùng phần tử
 
 using Fields = std::vector<std::string>;
 using Handler = std::function<void(Client &c, const Fields &f)>;
@@ -27,25 +28,53 @@ static void handlePing(Client &c, const Fields &)
   sendMsg(c, "200|PING");
 }
 
-static const std::map<std::string, Handler> HANDLERS = {
-    {"PING", handlePing},
-    {"REGISTER", handleRegister},
-    {"LOGIN", handleLogin},
-    {"LOGOUT", handleLogout},
+using S = ConnState; // đặt tên ngắn cho đỡ dài dòng
+
+// Một vài tập trạng thái hay dùng
+const std::set<ConnState> ANY = {S::CONNECTED, S::IDLE, S::QUEUED, S::ROOM_WAITING, S::IN_GAME};
+const std::set<ConnState> NOT_LOGGED = {S::CONNECTED};
+
+// Một lệnh = hàm xử lý + những trạng thái được phép
+struct Command
+{
+  Handler handler;
+  std::set<ConnState> allowed;
 };
 
+static const std::map<std::string, Command> COMMANDS = {
+    {"PING", {handlePing, ANY}},
+    {"REGISTER", {handleRegister, NOT_LOGGED}},
+    {"LOGIN", {handleLogin, NOT_LOGGED}},
+    {"LOGOUT", {handleLogout, {S::IDLE, S::QUEUED, S::ROOM_WAITING}}},
+};
 void dispatch(Client &c, const std::string &line)
 {
-  logMsg("RECV", c, line); // ← printf → logMsg
+  logMsg("RECV", c, line);
   if (line.empty())
     return;
 
   Fields f = splitFields(line);
-  auto it = HANDLERS.find(f[0]);
-  if (it == HANDLERS.end())
+  const std::string &cmd = f[0];
+
+  // 1. Lệnh có tồn tại?
+  auto it = COMMANDS.find(cmd);
+  if (it == COMMANDS.end())
   {
-    sendMsg(c, "400|ERROR|UNKNOWN_COMMAND"); // ← đổi
+    sendMsg(c, "400|ERROR|UNKNOWN_COMMAND");
     return;
   }
-  it->second(c, f); // ← đổi
+  const Command &command = it->second;
+
+  // 2. Trạng thái hiện tại có nằm trong danh sách cho phép?
+  if (command.allowed.count(c.state) == 0)
+  {
+    if (c.state == ConnState::CONNECTED)
+      sendMsg(c, "401|" + cmd + "|NOT_LOGGED_IN");
+    else
+      sendMsg(c, "405|" + cmd + "|WRONG_STATE");
+    return;
+  }
+
+  // 3 + 4. Hợp lệ → gọi handler (handler tự kiểm tra định dạng)
+  command.handler(c, f);
 }
