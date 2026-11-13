@@ -24,6 +24,18 @@ void sendMsg(Client &c, const std::string &msg)
   sendAll(c.fd, msg + "\n");
 }
 
+// Gửi nhiều dòng trong MỘT lần sendAll. Log từng dòng riêng cho dễ đọc
+void sendBlock(Client &c, const std::vector<std::string> &lines)
+{
+  std::string data;
+  for (const std::string &line : lines)
+  {
+    logMsg("SEND", c, line);
+    data += line + "\n"; // ghép tất cả thành 1 chuỗi
+  }
+  sendAll(c.fd, data); // gửi một lần
+}
+
 // Trả về con trỏ tới client đang đăng nhập bằng 'name', hoặc nullptr nếu không ai
 Client *findByUser(const std::string &name)
 {

@@ -1,5 +1,6 @@
 #include "dispatcher.h"
 #include "logger.h"
+#include "lobby.h"
 #include <vector>
 #include <functional>
 #include "auth.h"
@@ -48,6 +49,7 @@ using S = ConnState; // đặt tên ngắn cho đỡ dài dòng
 // Một vài tập trạng thái hay dùng
 const std::set<ConnState> ANY = {S::CONNECTED, S::IDLE, S::QUEUED, S::ROOM_WAITING, S::IN_GAME};
 const std::set<ConnState> NOT_LOGGED = {S::CONNECTED};
+const std::set<ConnState> LOGGED_IN = {S::IDLE, S::QUEUED, S::ROOM_WAITING, S::IN_GAME};
 
 // Một lệnh = hàm xử lý + những trạng thái được phép
 struct Command
@@ -61,6 +63,7 @@ static const std::map<std::string, Command> COMMANDS = {
     {"REGISTER", {handleRegister, NOT_LOGGED}},
     {"LOGIN", {handleLogin, NOT_LOGGED}},
     {"LOGOUT", {handleLogout, {S::IDLE, S::QUEUED, S::ROOM_WAITING}}},
+    {"LIST_ONLINE", {handleListOnline, LOGGED_IN}},
 };
 void dispatch(Client &c, const std::string &line)
 {

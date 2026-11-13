@@ -1,3 +1,5 @@
 chess-server/build/
 chess-server/server
 *.log
+users.txt
+users.txt.tmp
