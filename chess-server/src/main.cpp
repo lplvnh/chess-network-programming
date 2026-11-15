@@ -49,7 +49,8 @@ int main()
     }
 
     // 2. Chờ tới khi có socket nào đó sẵn sàng
-    select(maxfd + 1, &readfds, nullptr, nullptr, nullptr);
+    timeval tv{1, 0};                                   // 1 giây, 0 micro giây
+    select(maxfd + 1, &readfds, nullptr, nullptr, &tv); // nullptr → &tv
 
     // 3. Socket lễ tân sẵn sàng = có người mới kết nối
     if (FD_ISSET(listenFd, &readfds))
@@ -91,6 +92,7 @@ int main()
         sendMsg(c, "400|ERROR|LINE_TOO_LONG");
     }
 
+    matchmakerTick();
     // 5. Xóa các client đã ngắt khỏi danh sách
     for (int fd : closed)
       clients.erase(fd); // ← đổi: map xóa theo key, gọn hơn

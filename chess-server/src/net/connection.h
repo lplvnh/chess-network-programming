@@ -2,6 +2,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <ctime> // ← THÊM (time_t, time)
 
 // 5 trạng thái của một kết nối (state machine, mục 5.6 trong design)
 enum class ConnState
@@ -22,6 +23,7 @@ struct Client
   std::string mode;                       // ← MỚI: "RANDOM" hoặc "RANKED"
   ConnState state = ConnState::CONNECTED; // ← MỚI
   std::string roomId;                     // phòng đang chơi, rỗng nếu không chơi
+  time_t queuedAt = 0;                    // ← THÊM: thời điểm FIND_MATCH (giây)
 };
 
 extern std::map<int, Client> clients; // extern = biến thật nằm ở .cpp
