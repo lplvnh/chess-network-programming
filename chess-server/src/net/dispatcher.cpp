@@ -1,6 +1,7 @@
 #include "dispatcher.h"
 #include "logger.h"
 #include "lobby.h"
+#include "matchmaker.h"
 #include <vector>
 #include <functional>
 #include "auth.h"
@@ -65,6 +66,8 @@ static const std::map<std::string, Command> COMMANDS = {
     {"LOGOUT", {handleLogout, {S::IDLE, S::QUEUED, S::ROOM_WAITING}}},
     {"LIST_ONLINE", {handleListOnline, LOGGED_IN}},
     {"LEADERBOARD", {handleLeaderboard, LOGGED_IN}},
+    {"FIND_MATCH", {handleFindMatch, {S::IDLE}}},
+    {"CANCEL_MATCH", {handleCancelMatch, {S::QUEUED}}},
 };
 void dispatch(Client &c, const std::string &line)
 {

@@ -21,6 +21,7 @@ struct Client
   std::string user;                       // ← MỚI: rỗng = chưa đăng nhập
   std::string mode;                       // ← MỚI: "RANDOM" hoặc "RANKED"
   ConnState state = ConnState::CONNECTED; // ← MỚI
+  std::string roomId;                     // phòng đang chơi, rỗng nếu không chơi
 };
 
 extern std::map<int, Client> clients; // extern = biến thật nằm ở .cpp

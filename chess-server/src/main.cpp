@@ -3,6 +3,7 @@
 #include "framer.h"
 #include "dispatcher.h"
 #include "store.h"
+#include "matchmaker.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -75,6 +76,8 @@ int main()
       if (r <= 0)
       {
         logMsg("DISC", c, "disconnected"); // ← printf → logMsg
+        if (c.state == ConnState::QUEUED)
+          leaveQueue(c);
         close(fd);
         closed.push_back(fd);
         continue;
