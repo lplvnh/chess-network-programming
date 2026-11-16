@@ -21,30 +21,39 @@ static void sendGameStart(Client &me, const Room &r, const std::string &color,
                   opp + "|" + std::to_string(oppRating) + "|" + r.fen);
 }
 
-void startGame(Client &a, Client &b, const std::string &source)
+std::string newRoomId()
 {
-  Room r;
-  r.id = "R" + std::to_string(nextRoomNumber++); // R1, R2, ...
-  r.source = source;
+  return "R" + std::to_string(nextRoomNumber++);
+}
+
+// Bắt đầu ván trong phòng r (đã có sẵn) giữa a và b
+void beginGame(Room &r, Client &a, Client &b)
+{
+  r.state = "PLAYING";
   r.fen = START_FEN;
 
-  // Bốc màu: mặc định a trắng, tung đồng xu thì đổi
   Client *white = &a;
   Client *black = &b;
   if (coinFlip())
     std::swap(white, black);
   r.white = white->user;
   r.black = black->user;
-  rooms[r.id] = r;
 
-  // Cả hai vào trạng thái đang chơi
   for (Client *c : {white, black})
   {
     c->state = ConnState::IN_GAME;
     c->roomId = r.id;
   }
-
-  // Mỗi người một bản tin riêng
   sendGameStart(*white, r, "WHITE", r.black);
   sendGameStart(*black, r, "BLACK", r.white);
+}
+
+// Ghép trận: tạo phòng mới rồi bắt đầu luôn
+void startGame(Client &a, Client &b, const std::string &source)
+{
+  Room r;
+  r.id = newRoomId();
+  r.source = source;
+  rooms[r.id] = r;
+  beginGame(rooms[r.id], a, b); // truyền phòng THẬT trong map, không phải bản sao r
 }

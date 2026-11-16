@@ -2,6 +2,7 @@
 #include "logger.h"
 #include "lobby.h"
 #include "matchmaker.h"
+#include "rooms.h"
 #include <vector>
 #include <functional>
 #include "auth.h"
@@ -68,6 +69,9 @@ static const std::map<std::string, Command> COMMANDS = {
     {"LEADERBOARD", {handleLeaderboard, LOGGED_IN}},
     {"FIND_MATCH", {handleFindMatch, {S::IDLE}}},
     {"CANCEL_MATCH", {handleCancelMatch, {S::QUEUED}}},
+    {"CREATE_ROOM", {handleCreateRoom, {S::IDLE}}},
+    {"INVITE", {handleInvite, {S::ROOM_WAITING}}},
+    {"LEAVE_ROOM", {handleLeaveRoom, {S::ROOM_WAITING}}},
 };
 void dispatch(Client &c, const std::string &line)
 {
