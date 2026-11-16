@@ -2,7 +2,7 @@
 #include "store.h"
 #include <cctype> // isalnum
 #include "password.h"
-#include "matchmaker.h"
+#include "cleanup.h"
 
 // Tên hợp lệ: 3–20 ký tự, chỉ gồm chữ, số, dấu _
 static bool validUser(const std::string &u)
@@ -96,8 +96,7 @@ void handleLogin(Client &c, const std::vector<std::string> &f)
 
 void handleLogout(Client &c, const std::vector<std::string> &)
 {
-  if (c.state == ConnState::QUEUED)
-    leaveQueue(c);
+  cleanupClient(c);
   sendMsg(c, "200|LOGOUT"); // gửi TRƯỚC khi xóa tên, để log còn ghi user=alice
   c.user.clear();
   c.mode.clear();

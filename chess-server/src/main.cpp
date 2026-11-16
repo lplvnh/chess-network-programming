@@ -4,6 +4,8 @@
 #include "dispatcher.h"
 #include "store.h"
 #include "matchmaker.h"
+#include "rooms.h"
+#include "cleanup.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -77,8 +79,7 @@ int main()
       if (r <= 0)
       {
         logMsg("DISC", c, "disconnected"); // ← printf → logMsg
-        if (c.state == ConnState::QUEUED)
-          leaveQueue(c);
+        cleanupClient(c);
         close(fd);
         closed.push_back(fd);
         continue;
@@ -93,6 +94,7 @@ int main()
     }
 
     matchmakerTick();
+    roomTick();
     // 5. Xóa các client đã ngắt khỏi danh sách
     for (int fd : closed)
       clients.erase(fd); // ← đổi: map xóa theo key, gọn hơn

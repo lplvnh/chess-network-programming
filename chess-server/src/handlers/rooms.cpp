@@ -2,7 +2,7 @@
 #include "room.h"
 #include "store.h"
 
-const int INVITE_SECONDS = 60; // lời mời sống 60 giây
+const int INVITE_SECONDS = 20; // lời mời sống 60 giây
 
 void handleCreateRoom(Client &c, const std::vector<std::string> &f)
 {
@@ -155,4 +155,31 @@ void handleDeclineInvite(Client &c, const std::vector<std::string> &f)
   Client *host = findByUser(r.host);
   if (host)
     sendMsg(*host, "INVITE_DECLINED|" + c.user);
+}
+
+// Gọi mỗi giây: xóa lời mời quá hạn
+void roomTick()
+{
+  time_t now = time(nullptr);
+  for (auto &[id, r] : rooms)
+  {
+    for (auto it = r.invites.begin(); it != r.invites.end();)
+    {
+      if (it->second > now)
+      {
+        ++it;
+        continue;
+      } // chưa hết hạn → sang cái tiếp
+
+      std::string name = it->first; // chép tên ra TRƯỚC khi xóa
+      it = r.invites.erase(it);     // xóa, nhận về phần tử kế tiếp
+
+      Client *invitee = findByUser(name);
+      if (invitee)
+        sendMsg(*invitee, "INVITE_CANCELLED|" + id);
+      Client *host = findByUser(r.host);
+      if (host)
+        sendMsg(*host, "INVITE_DECLINED|" + name);
+    }
+  }
 }
