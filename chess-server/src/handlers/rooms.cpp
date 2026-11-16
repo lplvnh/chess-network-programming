@@ -11,6 +11,7 @@ void handleCreateRoom(Client &c, const std::vector<std::string> &f)
     sendMsg(c, "400|CREATE_ROOM|BAD_FORMAT");
     return;
   }
+  cancelInvitesTo(c);
   Room r;
   r.id = newRoomId();
   r.source = "ROOM";
@@ -79,4 +80,79 @@ void closeRoom(Client &host)
   rooms.erase(r.id);
   host.roomId.clear();
   host.state = ConnState::IDLE;
+}
+
+// c sắp rời IDLE: hủy mọi lời mời tới c, báo cho từng chủ phòng
+void cancelInvitesTo(Client &c)
+{
+  for (auto &[id, r] : rooms)
+  {
+    if (r.invites.erase(c.user) == 0)
+      continue; // phòng này không mời c → bỏ qua
+    Client *host = findByUser(r.host);
+    if (host)
+      sendMsg(*host, "INVITE_DECLINED|" + c.user);
+  }
+}
+
+void handleAcceptInvite(Client &c, const std::vector<std::string> &f)
+{
+  if (f.size() != 2)
+  {
+    sendMsg(c, "400|ACCEPT_INVITE|BAD_FORMAT");
+    return;
+  }
+  // 1. Có phòng này và phòng có mời mình không?
+  auto it = rooms.find(f[1]);
+  if (it == rooms.end() || it->second.invites.count(c.user) == 0)
+  {
+    sendMsg(c, "404|ACCEPT_INVITE|NO_SUCH_INVITE");
+    return;
+  }
+  Room &r = it->second;
+
+  // 2. Phòng còn chờ không?
+  if (r.state != "WAITING")
+  {
+    sendMsg(c, "410|ACCEPT_INVITE|ROOM_FULL");
+    return;
+  }
+
+  // 3. Dọn lời mời
+  r.invites.erase(c.user); // lời mời của chính mình
+  cancelInvitesTo(c);      // ② lời mời từ phòng khác tới mình
+  for (const auto &[name, expires] : r.invites)
+  {
+    Client *other = findByUser(name); // ① người khác được mời vào phòng này
+    if (other)
+      sendMsg(*other, "INVITE_CANCELLED|" + r.id);
+  }
+  r.invites.clear();
+
+  // 4. Trả lời rồi bắt đầu ván
+  sendMsg(c, "200|ACCEPT_INVITE|" + r.id); // response TRƯỚC, event GAME_START SAU
+  Client *host = findByUser(r.host);
+  beginGame(r, *host, c); // hàm đã tách ở bước 5.1
+}
+
+void handleDeclineInvite(Client &c, const std::vector<std::string> &f)
+{
+  if (f.size() != 2)
+  {
+    sendMsg(c, "400|DECLINE_INVITE|BAD_FORMAT");
+    return;
+  }
+  auto it = rooms.find(f[1]);
+  if (it == rooms.end() || it->second.invites.count(c.user) == 0)
+  {
+    sendMsg(c, "404|DECLINE_INVITE|NO_SUCH_INVITE");
+    return;
+  }
+  Room &r = it->second;
+  r.invites.erase(c.user);
+  sendMsg(c, "200|DECLINE_INVITE|" + r.id);
+
+  Client *host = findByUser(r.host);
+  if (host)
+    sendMsg(*host, "INVITE_DECLINED|" + c.user);
 }

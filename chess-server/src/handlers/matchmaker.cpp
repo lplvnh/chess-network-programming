@@ -1,5 +1,6 @@
 #include "matchmaker.h"
 #include "room.h"
+#include "rooms.h"
 #include <deque>
 #include <algorithm>
 #include <cstdlib> // std::abs (trị tuyệt đối)
@@ -90,6 +91,7 @@ void handleFindMatch(Client &c, const std::vector<std::string> &f)
     sendMsg(c, "400|FIND_MATCH|BAD_FORMAT");
     return;
   }
+  cancelInvitesTo(c);
   queueOf(c).push_back(c.fd); // xếp vào cuối hàng
   c.state = ConnState::QUEUED;
   c.queuedAt = time(nullptr);             // ← THÊM: giờ hiện tại, tính bằng giây
