@@ -24,6 +24,7 @@ struct Client
   ConnState state = ConnState::CONNECTED; // ← MỚI
   std::string roomId;                     // phòng đang chơi, rỗng nếu không chơi
   time_t queuedAt = 0;                    // ← THÊM: thời điểm FIND_MATCH (giây)
+  time_t lastSeen = 0;
 };
 
 extern std::map<int, Client> clients; // extern = biến thật nằm ở .cpp

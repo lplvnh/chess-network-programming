@@ -16,6 +16,20 @@
 #include <vector>    // ← MỚI: danh sách client
 #include <algorithm> // ← MỚI: std::max, std::find
 
+#include <ctime> // ← THÊM ở phần include
+
+const int HEARTBEAT_TIMEOUT = 45;
+
+// Ngắt client c: ghi log, dọn dẹp theo trạng thái, đóng socket, đánh dấu để xóa
+static void dropClient(Client &c, const std::string &reason, std::vector<int> &closed)
+{
+  logMsg("DISC", c, "reason=" + reason);
+  cleanupClient(c);
+  c.user.clear(); // để findByUser không tìm thấy client sắp xóa này nữa
+  close(c.fd);
+  closed.push_back(c.fd);
+}
+
 int main()
 {
   logOpen("server.log");
@@ -62,6 +76,7 @@ int main()
       int fd = accept(listenFd, (sockaddr *)&ca, &len); // ← trước đây là nullptr, nullptr
       Client c;
       c.fd = fd;
+      c.lastSeen = time(nullptr);
       c.addr = std::string(inet_ntoa(ca.sin_addr)) + ":" + std::to_string(ntohs(ca.sin_port));
       clients[fd] = c;
       logMsg("CONN", clients[fd], "connected");
@@ -78,19 +93,26 @@ int main()
       ssize_t r = recv(fd, buf, sizeof(buf), 0);
       if (r <= 0)
       {
-        logMsg("DISC", c, "disconnected"); // ← printf → logMsg
-        cleanupClient(c);
-        close(fd);
-        closed.push_back(fd);
+        dropClient(c, "recv_0", closed);
         continue;
       }
-      c.buffer.append(buf, r); // ← buffer → c.buffer (cả dưới nữa)
+      c.lastSeen = time(nullptr); // ← có dữ liệu = còn sống
+      c.buffer.append(buf, r);
 
       bool tooLong;
       for (const std::string &line : extractLines(c.buffer, tooLong))
         dispatch(c, line); // tên mới của handleLine (xem 1.6e)
       if (tooLong)
         sendMsg(c, "400|ERROR|LINE_TOO_LONG");
+    }
+
+    // Heartbeat: ai đã đăng nhập mà im lặng quá lâu thì coi như ngắt
+    time_t now = time(nullptr);
+    for (auto &[fd, c] : clients)
+    {
+      bool alreadyClosed = std::find(closed.begin(), closed.end(), fd) != closed.end();
+      if (!alreadyClosed && !c.user.empty() && now - c.lastSeen > HEARTBEAT_TIMEOUT)
+        dropClient(c, "timeout", closed);
     }
 
     matchmakerTick();
