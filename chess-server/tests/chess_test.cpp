@@ -32,5 +32,19 @@ int main()
 
   parseFen("4k3/8/8/8/4Q3/8/8/4K3 b - - 0 1", p);
   printf("black in check (queen e4)? %s (expect yes)\n", inCheck(p, 'b') ? "yes" : "no");
+
+  // 4. Lọc nước đi: đen bị hậu e4 chiếu, vua e8 không được bước sang e7
+  listMoves("Black in check", "4k3/8/8/8/4Q3/8/8/4K3 b - - 0 1");
+
+  // 5. perft từ thế cờ ban đầu
+  const char *START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  long long expected[] = {1, 20, 400, 8902, 197281};
+  parseFen(START, p);
+  for (int d = 1; d <= 4; d++)
+  {
+    long long got = perft(p, d);
+    printf("perft(%d) = %8lld  expected %8lld  %s\n", d, got, expected[d],
+           got == expected[d] ? "OK" : "FAIL");
+  }
   return 0;
 }

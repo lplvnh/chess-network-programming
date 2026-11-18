@@ -333,8 +333,50 @@ static std::vector<Move> pseudoMoves(const Position &p)
   return moves;
 }
 
-// TẠM THỜI: chưa lọc nước đi để vua bị chiếu (bước 6.3 sẽ sửa)
+Position makeMove(const Position &p, const Move &m)
+{
+  Position n = p; // sao chép, p giữ nguyên
+  char piece = n.board[m.from];
+  char captured = n.board[m.to]; // '.' nếu ô đích trống
+  bool isPawn = tolower((unsigned char)piece) == 'p';
+
+  // 1. Di chuyển quân (quân bị ăn tự mất vì bị ghi đè)
+  n.board[m.to] = piece;
+  n.board[m.from] = '.';
+
+  // (bước 6.4: bắt tốt qua đường, phong cấp, nhập thành, quyền nhập thành, ô ep)
+  n.ep = -1;
+
+  // 2. Đồng hồ 50 nước
+  n.halfmove = (isPawn || captured != '.') ? 0 : p.halfmove + 1;
+
+  // 3. Số thứ tự nước tăng sau khi đen đi
+  if (p.side == 'b')
+    n.fullmove++;
+
+  // 4. Đổi lượt
+  n.side = other(p.side);
+  return n;
+}
+
 std::vector<Move> legalMoves(const Position &p)
 {
-  return pseudoMoves(p);
+  std::vector<Move> legal;
+  for (const Move &m : pseudoMoves(p))
+  {
+    Position n = makeMove(p, m);
+    if (!inCheck(n, p.side))
+      legal.push_back(m); // p.side = bên VỪA đi
+  }
+  return legal;
+}
+
+long long perft(const Position &p, int depth)
+{
+  if (depth == 0)
+    return 1; // đi hết độ sâu = 1 chuỗi hoàn chỉnh
+  long long total = 0;
+  for (const Move &m : legalMoves(p))
+    total += perft(makeMove(p, m), depth - 1); // đệ quy: thử từng nước, đếm tiếp
+  return total;
 }

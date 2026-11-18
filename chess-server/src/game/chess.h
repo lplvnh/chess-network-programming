@@ -32,3 +32,6 @@ std::string moveToUci(const Move &m);                        // {52,36,0} → "e
 bool squareAttacked(const Position &p, int sq, char bySide); // ô sq có bị bySide tấn công?
 bool inCheck(const Position &p, char side);                  // vua của side có bị chiếu?
 std::vector<Move> legalMoves(const Position &p);             // mọi nước đi hợp lệ
+
+Position makeMove(const Position &p, const Move &m); // trả về thế cờ SAU khi đi
+long long perft(const Position &p, int depth);       // đếm để test
