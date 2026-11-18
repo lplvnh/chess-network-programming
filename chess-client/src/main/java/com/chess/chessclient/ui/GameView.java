@@ -10,6 +10,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.control.ButtonType;
 
 public class GameView implements Screen {
     private final ChessApp app;
@@ -19,6 +20,7 @@ public class GameView implements Screen {
     private final String myColor;                 // "WHITE" / "BLACK"
     private final Label turnLabel = new Label();
     private final Label status = new Label();
+    private final HBox drawOfferBar = new HBox(8);    // thanh "Đối thủ đề nghị hòa"
 
     // msg = GAME_START|room_id|source|color|opp|opp_rating|fen
     public GameView(ChessApp app, Message msg) {
@@ -35,6 +37,7 @@ public class GameView implements Screen {
         board.setOnMove(uci -> {
             board.setEnabled(false);              // khóa tới khi server trả lời
             status.setText("");
+            showDrawOffer(false); //đi quân = từ chối hòa (server tự báo bên kia)
             app.send("MOVE|" + uci);
         });
         updateTurn(fen);
@@ -48,15 +51,56 @@ public class GameView implements Screen {
         turnLabel.setStyle("-fx-font-size: 16px;");
         status.setStyle("-fx-text-fill: #c0392b; -fx-font-size: 14px;");
 
+        // Xin thua: hỏi lại trước khi gửi
         Button resignBtn = new Button("Xin thua");
-        resignBtn.setOnAction(e -> app.send("RESIGN"));
+        resignBtn.setOnAction(e -> {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Bạn chắc chắn muốn xin thua?", ButtonType.YES, ButtonType.NO);
+            confirm.setHeaderText(null);
+            if (confirm.showAndWait().orElse(ButtonType.NO) == ButtonType.YES)
+                app.send("RESIGN");
+        });
 
-        VBox side = new VBox(12, title, oppLabel, meLabel, turnLabel, status, resignBtn);
-        side.setPrefWidth(260);
+        // Cầu hòa
+        Button drawBtn = new Button("Cầu hòa");
+        drawBtn.setOnAction(e -> app.send("OFFER_DRAW"));
+
+        // Thanh trả lời lời cầu hòa (ẩn sẵn)
+        Button acceptBtn = new Button("Đồng ý");
+        Button declineBtn = new Button("Từ chối");
+        acceptBtn.setOnAction(e -> { app.send("ACCEPT_DRAW"); showDrawOffer(false); });
+        declineBtn.setOnAction(e -> { app.send("DECLINE_DRAW"); showDrawOffer(false); });
+        drawOfferBar.getChildren().addAll(new Label("Đối thủ đề nghị hòa"), acceptBtn, declineBtn);
+        drawOfferBar.setAlignment(Pos.CENTER_LEFT);
+        drawOfferBar.setStyle("-fx-background-color: #fff3cd; -fx-padding: 8;");
+        showDrawOffer(false);
+
+        VBox side = new VBox(12, title, oppLabel, meLabel, turnLabel, status,
+                drawOfferBar, new HBox(10, drawBtn, resignBtn));
+        side.setPrefWidth(280);
 
         root.getChildren().addAll(board, side);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(20));
+    }
+
+    private static String reasonText(String reason) {
+        return switch (reason) {
+            case "CHECKMATE"             -> "Chiếu hết";
+            case "STALEMATE"             -> "Hòa pat (hết nước đi nhưng không bị chiếu)";
+            case "RESIGN"                -> "Xin thua";
+            case "DRAW_AGREED"           -> "Hai bên đồng ý hòa";
+            case "INSUFFICIENT_MATERIAL" -> "Không đủ quân để chiếu hết";
+            case "FIFTY_MOVE"            -> "Luật 50 nước";
+            case "THREEFOLD_REPETITION"  -> "Lặp lại thế cờ 3 lần";
+            case "DISCONNECT"            -> "Đối thủ mất kết nối";
+            default                      -> reason;
+        };
+    }
+
+    private void showDrawOffer(boolean show) {
+        drawOfferBar.setVisible(show);
+        drawOfferBar.setManaged(show);    // ẩn hẳn, không chiếm chỗ
     }
 
     @Override
@@ -86,6 +130,17 @@ public class GameView implements Screen {
                 updateTurn(msg.arg(2));
                 status.setText(msg.arg(1).equals("CHECK") ? "Bạn đang bị chiếu!" : "");
             }
+            case "OFFER_DRAW" -> status.setText(switch (msg.code()) {
+                case 200 -> "Đã gửi lời cầu hòa";
+                default  -> switch (msg.arg(0)) {
+                    case "ALREADY_PENDING" -> "Đang có lời cầu hòa chờ trả lời";
+                    case "WAIT_YOUR_MOVE"  -> "Hãy đi thêm một nước trước khi cầu hòa lại";
+                    default                -> "Lỗi: " + msg.arg(0);
+                };
+            });
+            case "DRAW_OFFERED"  -> showDrawOffer(true);
+            case "DRAW_DECLINED" -> status.setText("Đối thủ từ chối hòa");
+            case "DECLINE_DRAW", "ACCEPT_DRAW", "RESIGN" -> { }   // 200: không cần làm gì, chờ bản tin tiếp
             case "GAME_OVER" -> showGameOver(msg);
             default -> { }
         }
@@ -101,6 +156,7 @@ public class GameView implements Screen {
 
     // GAME_OVER|result|reason|new_rating|delta
     private void showGameOver(Message msg) {
+        showDrawOffer(false);
         board.setEnabled(false);
         String result = switch (msg.arg(0)) {
             case "WIN"  -> "Bạn thắng!";
@@ -112,7 +168,8 @@ public class GameView implements Screen {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Kết thúc ván");
         alert.setHeaderText(result);
-        alert.setContentText("Lý do: " + msg.arg(1) + "\nRating mới: " + msg.arg(2) + " (" + msg.arg(3) + ")");
+        alert.setContentText(reasonText(msg.arg(1))
+                + "\n\nRating mới: " + msg.arg(2) + " (" + msg.arg(3) + ")");
         alert.showAndWait();
         app.show(new LobbyView(app));
     }
