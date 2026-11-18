@@ -19,6 +19,9 @@ public class LobbyView implements Screen {
     private final Label header = new Label();
     private final Label status = new Label();
 
+    private final Button findBtn = new Button("Tìm trận");
+    private boolean searching = false;
+
     public LobbyView(ChessApp app) {
         this.app = app;
 
@@ -64,9 +67,13 @@ public class LobbyView implements Screen {
         center.setPadding(new Insets(10));
 
         // ----- Thanh dưới: nút chức năng (C5, C8 sẽ gắn việc) -----
-        Button findBtn = new Button("Tìm trận");
+
         Button roomBtn = new Button("Tạo phòng");
-        findBtn.setDisable(true);   // C5
+        findBtn.setOnAction(e -> {
+            if (!searching) app.send("FIND_MATCH");
+            else            app.send("CANCEL_MATCH");
+            findBtn.setDisable(true);            // khóa tới khi server trả lời
+        });
         roomBtn.setDisable(true);   // C8
         HBox bottom = new HBox(12, findBtn, roomBtn, status);
         bottom.setAlignment(Pos.CENTER);
@@ -85,6 +92,12 @@ public class LobbyView implements Screen {
     private void refresh() {
         app.send("LIST_ONLINE");
         app.send("LEADERBOARD|10");
+    }
+
+    private void setSearching(boolean on) {
+        searching = on;
+        findBtn.setText(on ? "Hủy tìm trận" : "Tìm trận");
+        status.setText(on ? "Đang tìm đối thủ (" + app.myMode + ")..." : "");
     }
 
     @Override
@@ -108,6 +121,17 @@ public class LobbyView implements Screen {
                     app.show(new LoginView(app, ""));
                 }
             }
+            case "FIND_MATCH" -> {
+                findBtn.setDisable(false);
+                if (msg.isOk()) setSearching(true);              // 202
+                else status.setText("Không tìm trận được: " + msg.arg(0));
+            }
+            case "CANCEL_MATCH" -> {
+                findBtn.setDisable(false);
+                if (msg.isOk()) setSearching(false);             // 200
+                // 405 WRONG_STATE: vừa được ghép xong, GAME_START sắp tới → bỏ qua
+            }
+            case "GAME_START" -> app.show(new GameView(app, msg));
             default -> { }   // PING và các bản tin khác: bỏ qua
         }
     }
