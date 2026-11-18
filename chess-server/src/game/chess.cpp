@@ -43,6 +43,20 @@ std::string squareName(int sq)
   return s;
 }
 
+std::string moveToUci(const Move &m)
+{
+  std::string s = squareName(m.from) + squareName(m.to);
+  if (m.promo)
+    s += m.promo;
+  return s;
+}
+
+// Bảng hướng (đổi hàng, đổi cột)
+static const int KNIGHT[8][2] = {{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {2, -1}, {2, 1}};
+static const int KING[8][2] = {{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}};
+static const int ROOK_DIRS[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+static const int BISHOP_DIRS[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
 bool parseFen(const std::string &fen, Position &p)
 {
   // Tách 6 phần cách nhau bởi dấu cách
@@ -154,4 +168,173 @@ void printBoard(const Position &p)
     printf("\n");
   }
   printf("\n   a b c d e f g h\n");
+}
+
+bool squareAttacked(const Position &p, int sq, char by)
+{
+  int r = rowOf(sq), c = colOf(sq);
+
+  // Hàm nhỏ: ô (rr,cc) có quân loại 'lowerPiece' của bên 'by' không?
+  auto is = [&](int rr, int cc, char lowerPiece)
+  {
+    if (!onBoard(rr, cc))
+      return false;
+    char piece = p.board[sqOf(rr, cc)];
+    return colorOf(piece) == by && tolower((unsigned char)piece) == lowerPiece;
+  };
+
+  // Tốt: tốt TRẮNG tấn công LÊN (hàng nhỏ hơn), nên nó phải đứng ở hàng r+1
+  int pr = (by == 'w') ? r + 1 : r - 1;
+  if (is(pr, c - 1, 'p') || is(pr, c + 1, 'p'))
+    return true;
+
+  // Mã, vua: nhìn ra 8 ô
+  for (auto &d : KNIGHT)
+    if (is(r + d[0], c + d[1], 'n'))
+      return true;
+  for (auto &d : KING)
+    if (is(r + d[0], c + d[1], 'k'))
+      return true;
+
+  // Xe/hậu: trượt thẳng, chỉ xét quân ĐẦU TIÊN gặp được
+  for (auto &d : ROOK_DIRS)
+  {
+    int rr = r + d[0], cc = c + d[1];
+    while (onBoard(rr, cc))
+    {
+      char piece = p.board[sqOf(rr, cc)];
+      if (piece != '.')
+      {
+        if (colorOf(piece) == by && (tolower(piece) == 'r' || tolower(piece) == 'q'))
+          return true;
+        break; // bị chắn → hướng này xong
+      }
+      rr += d[0];
+      cc += d[1];
+    }
+  }
+  // Tượng/hậu: trượt chéo
+  for (auto &d : BISHOP_DIRS)
+  {
+    int rr = r + d[0], cc = c + d[1];
+    while (onBoard(rr, cc))
+    {
+      char piece = p.board[sqOf(rr, cc)];
+      if (piece != '.')
+      {
+        if (colorOf(piece) == by && (tolower(piece) == 'b' || tolower(piece) == 'q'))
+          return true;
+        break;
+      }
+      rr += d[0];
+      cc += d[1];
+    }
+  }
+  return false;
+}
+
+// Tìm vua của side, hỏi xem ô đó có bị bên kia tấn công không
+bool inCheck(const Position &p, char side)
+{
+  char king = (side == 'w') ? 'K' : 'k';
+  for (int sq = 0; sq < 64; sq++)
+    if (p.board[sq] == king)
+      return squareAttacked(p, sq, other(side));
+  return false;
+}
+
+// Trượt theo 4 hướng trong dirs (dùng cho xe, tượng, hậu)
+static void slide(const Position &p, std::vector<Move> &moves, int from, const int dirs[4][2])
+{
+  int r = rowOf(from), c = colOf(from);
+  for (int i = 0; i < 4; i++)
+  {
+    int rr = r + dirs[i][0], cc = c + dirs[i][1];
+    while (onBoard(rr, cc))
+    {
+      char target = p.board[sqOf(rr, cc)];
+      if (colorOf(target) == p.side)
+        break;                                  // quân mình chắn → dừng
+      moves.push_back({from, sqOf(rr, cc), 0}); // ô trống hoặc quân địch
+      if (target != '.')
+        break; // ăn quân địch → dừng
+      rr += dirs[i][0];
+      cc += dirs[i][1];
+    }
+  }
+}
+
+// Mọi nước đi "theo hình dạng" của bên đang tới lượt (chưa xét vua bị chiếu)
+static std::vector<Move> pseudoMoves(const Position &p)
+{
+  std::vector<Move> moves;
+  char me = p.side;
+  for (int from = 0; from < 64; from++)
+  {
+    char piece = p.board[from];
+    if (colorOf(piece) != me)
+      continue; // chỉ xét quân của mình
+    int r = rowOf(from), c = colOf(from);
+
+    switch (tolower((unsigned char)piece))
+    {
+    case 'p':
+    {
+      int dir = (me == 'w') ? -1 : 1;     // trắng đi lên, đen đi xuống
+      int startRow = (me == 'w') ? 6 : 1; // hàng xuất phát của tốt
+      // Tiến 1 ô (ô phía trước phải trống)
+      if (onBoard(r + dir, c) && p.board[sqOf(r + dir, c)] == '.')
+      {
+        moves.push_back({from, sqOf(r + dir, c), 0});
+        // Tiến 2 ô: chỉ từ hàng xuất phát, và ô thứ 2 cũng trống
+        if (r == startRow && p.board[sqOf(r + 2 * dir, c)] == '.')
+          moves.push_back({from, sqOf(r + 2 * dir, c), 0});
+      }
+      // Ăn chéo: chỉ khi ô chéo có quân địch
+      for (int dc : {-1, 1})
+      {
+        if (!onBoard(r + dir, c + dc))
+          continue;
+        int to = sqOf(r + dir, c + dc);
+        if (colorOf(p.board[to]) == other(me))
+          moves.push_back({from, to, 0});
+      }
+      break;
+    }
+    case 'n':
+      for (auto &d : KNIGHT)
+      {
+        int rr = r + d[0], cc = c + d[1];
+        if (onBoard(rr, cc) && colorOf(p.board[sqOf(rr, cc)]) != me)
+          moves.push_back({from, sqOf(rr, cc), 0});
+      }
+      break;
+    case 'b':
+      slide(p, moves, from, BISHOP_DIRS);
+      break;
+    case 'r':
+      slide(p, moves, from, ROOK_DIRS);
+      break;
+    case 'q':
+      slide(p, moves, from, BISHOP_DIRS);
+      slide(p, moves, from, ROOK_DIRS);
+      break;
+    case 'k':
+      for (auto &d : KING)
+      {
+        int rr = r + d[0], cc = c + d[1];
+        if (onBoard(rr, cc) && colorOf(p.board[sqOf(rr, cc)]) != me)
+          moves.push_back({from, sqOf(rr, cc), 0});
+      }
+      // (bước 6.4: nhập thành)
+      break;
+    }
+  }
+  return moves;
+}
+
+// TẠM THỜI: chưa lọc nước đi để vua bị chiếu (bước 6.3 sẽ sửa)
+std::vector<Move> legalMoves(const Position &p)
+{
+  return pseudoMoves(p);
 }

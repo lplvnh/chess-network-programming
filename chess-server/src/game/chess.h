@@ -20,3 +20,15 @@ void printBoard(const Position &p);                 // in ra terminal để debu
 
 int squareIndex(const std::string &name); // "e2" → 52
 std::string squareName(int sq);           // 52 → "e2"
+
+struct Move
+{
+  int from;
+  int to;
+  char promo; // 'q','r','b','n' khi phong cấp, 0 nếu không
+};
+
+std::string moveToUci(const Move &m);                        // {52,36,0} → "e2e4"
+bool squareAttacked(const Position &p, int sq, char bySide); // ô sq có bị bySide tấn công?
+bool inCheck(const Position &p, char side);                  // vua của side có bị chiếu?
+std::vector<Move> legalMoves(const Position &p);             // mọi nước đi hợp lệ
