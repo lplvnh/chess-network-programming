@@ -3,6 +3,7 @@ package com.chess.chessclient;
 import com.chess.chessclient.net.Connection;
 import java.io.IOException;
 import java.util.Scanner;
+import com.chess.chessclient.net.Message;
 
 // Client dạng console, giống nc, để test phần mạng
 public class ConsoleTest {
@@ -11,25 +12,20 @@ public class ConsoleTest {
         Connection conn = new Connection();
         conn.connect(host, 5500);
 
-        // Luồng NHẬN: đọc mãi cho tới khi server đóng kết nối
-        Thread receiver = new Thread(() -> {
-            try {
-                while (conn.readLine() != null) { }        // readLine tự in [RECV]
-                System.out.println("[DISC] server closed the connection");
-            } catch (IOException e) {
-                System.out.println("[DISC] " + e.getMessage());
-            }
-            System.exit(0);
-        });
-        receiver.setDaemon(true);    // luồng phụ: chương trình tắt thì nó tắt theo
-        receiver.start();
+        conn.startReceiving(
+                msg -> {                                             // mỗi bản tin
+                    System.out.println("   => " + msg);
+                    for (String[] row : msg.data()) System.out.println("      " + String.join(" ", row));
+                },
+                () -> {                                              // mất kết nối
+                    System.out.println("[DISC] disconnected");
+                    System.exit(0);
+                });
 
-        // Luồng CHÍNH: đọc bàn phím, gửi lên server
         Scanner keyboard = new Scanner(System.in);
         while (keyboard.hasNextLine()) {
             String line = keyboard.nextLine();
-            if (line.isEmpty()) continue;
-            conn.send(line);
+            if (!line.isEmpty()) conn.send(line);
         }
         conn.close();
     }

@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 
 // Một kết nối TCP tới server: gửi 1 dòng, đọc 1 dòng, in log mọi bản tin
 public class Connection {
@@ -31,6 +32,37 @@ public class Connection {
         String line = in.readLine();
         if (line != null) System.out.println("[RECV] " + line);
         return line;
+    }
+
+    // Đọc MỘT bản tin hoàn chỉnh (gom thêm n dòng nếu là LIST_ONLINE/LEADERBOARD)
+    public Message readMessage() throws IOException {
+        String line = readLine();
+        if (line == null) return null;                     // server đóng kết nối
+        Message msg = new Message(line);
+        if (msg.hasDataLines()) {
+            int n = Integer.parseInt(msg.arg(0));          // trường thứ 3 = số dòng dữ liệu
+            for (int i = 0; i < n; i++) {
+                String dataLine = readLine();
+                if (dataLine == null) return null;
+                msg.addDataLine(dataLine);
+            }
+        }
+        return msg;
+    }
+
+    // Tạo luồng nhận: mỗi bản tin gọi onMessage, mất kết nối gọi onDisconnect
+    public void startReceiving(Consumer<Message> onMessage, Runnable onDisconnect) {
+        Thread receiver = new Thread(() -> {
+            try {
+                Message msg;
+                while ((msg = readMessage()) != null) onMessage.accept(msg);
+            } catch (IOException | RuntimeException e) {
+                System.out.println("[DISC] " + e.getMessage());
+            }
+            onDisconnect.run();
+        }, "receiver");
+        receiver.setDaemon(true);
+        receiver.start();
     }
 
     public void close() {
