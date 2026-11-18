@@ -16,6 +16,12 @@ static bool validUciFormat(const std::string &s)
   return true;
 }
 
+// Tên đối thủ của user trong phòng r
+static std::string opponentOf(const Room &r, const std::string &user)
+{
+  return user == r.white ? r.black : r.white;
+}
+
 void handleMove(Client &c, const std::vector<std::string> &f)
 {
   Room &r = rooms[c.roomId];
@@ -60,10 +66,28 @@ void handleMove(Client &c, const std::vector<std::string> &f)
   std::string fen = toFen(r.pos);
   sendMsg(c, "200|MOVE|" + uci + "|" + flag + "|" + fen);
 
-  std::string oppName = (myColor == 'w') ? r.black : r.white;
+  std::string oppName = opponentOf(r, c.user); // thay cho dòng (myColor == 'w') ? ...
   Client *opp = findByUser(oppName);
   if (opp)
     sendMsg(*opp, "OPP_MOVE|" + uci + "|" + flag + "|" + fen);
 
   // (bước 7: kiểm tra chiếu hết / hòa → GAME_OVER)
+}
+
+void handleResign(Client &c, const std::vector<std::string> &f)
+{
+  if (f.size() != 1)
+  {
+    sendMsg(c, "400|RESIGN|BAD_FORMAT");
+    return;
+  }
+  Room &r = rooms[c.roomId];
+  sendMsg(c, "200|RESIGN");                    // response trước
+  endGame(r, opponentOf(r, c.user), "RESIGN"); // rồi GAME_OVER cho cả hai
+}
+// Gọi khi c ngắt kết nối giữa ván: đối thủ thắng
+void forfeitOnDisconnect(Client &c)
+{
+  Room &r = rooms[c.roomId];
+  endGame(r, opponentOf(r, c.user), "DISCONNECT", c.user); // không gửi cho c
 }

@@ -5,3 +5,5 @@
 #include <vector>
 
 void handleMove(Client &c, const std::vector<std::string> &f);
+void handleResign(Client &c, const std::vector<std::string> &f);
+void forfeitOnDisconnect(Client &c);

@@ -1,6 +1,8 @@
 #include "room.h"
 #include "store.h"
 #include <random>
+#include <cmath>     // std::pow, std::lround
+#include <algorithm> // std::max
 
 std::map<std::string, Room> rooms;
 static int nextRoomNumber = 1;
@@ -56,4 +58,67 @@ void startGame(Client &a, Client &b, const std::string &source)
   r.source = source;
   rooms[r.id] = r;
   beginGame(rooms[r.id], a, b); // truyền phòng THẬT trong map, không phải bản sao r
+}
+
+// Δ cho người có rating myRating gặp oppRating, đạt score (1 / 0.5 / 0)
+static int eloDelta(int myRating, int oppRating, double score)
+{
+  double expected = 1.0 / (1.0 + std::pow(10.0, (oppRating - myRating) / 400.0));
+  return (int)std::lround(32 * (score - expected));
+}
+
+// 14 → "+14", -14 → "-14", 0 → "+0"
+static std::string signedNumber(int x)
+{
+  return (x >= 0 ? "+" : "") + std::to_string(x);
+}
+
+void endGame(Room &r, const std::string &winner, const std::string &reason,
+             const std::string &absentUser)
+{
+  User &w = g_users[r.white];
+  User &b = g_users[r.black];
+
+  // 1. Elo: tính một lần theo góc nhìn bên trắng
+  double whiteScore = winner.empty() ? 0.5 : (winner == r.white ? 1.0 : 0.0);
+  int delta = eloDelta(w.rating, b.rating, whiteScore);
+  int oldW = w.rating, oldB = b.rating;
+  w.rating = std::max(100, w.rating + delta); // sàn 100
+  b.rating = std::max(100, b.rating - delta);
+
+  if (winner.empty())
+  {
+    w.draws++;
+    b.draws++;
+  }
+  else if (winner == r.white)
+  {
+    w.wins++;
+    b.losses++;
+  }
+  else
+  {
+    b.wins++;
+    w.losses++;
+  }
+  storeSave(); // ghi users.txt ngay
+
+  // 2 + 3. Gửi GAME_OVER cho từng người, đưa về IDLE
+  for (const std::string &name : {r.white, r.black})
+  {
+    Client *c = findByUser(name);
+    if (c == nullptr)
+      continue; // đã offline
+    if (name != absentUser)
+    {
+      std::string result = winner.empty() ? "DRAW" : (winner == name ? "WIN" : "LOSS");
+      User &u = g_users[name];
+      int change = u.rating - (name == r.white ? oldW : oldB); // thay đổi THỰC TẾ (đã tính sàn 100)
+      sendMsg(*c, "GAME_OVER|" + result + "|" + reason + "|" +
+                      std::to_string(u.rating) + "|" + signedNumber(change));
+    }
+    c->state = ConnState::IDLE;
+    c->roomId.clear();
+  }
+  rooms.erase(r.id); // hủy phòng (sau dòng này KHÔNG dùng r nữa)
 }

@@ -76,6 +76,7 @@ static const std::map<std::string, Command> COMMANDS = {
     {"ACCEPT_INVITE", {handleAcceptInvite, {S::IDLE}}},
     {"DECLINE_INVITE", {handleDeclineInvite, {S::IDLE}}},
     {"MOVE", {handleMove, {S::IN_GAME}}},
+    {"RESIGN", {handleResign, {S::IN_GAME}}},
 };
 void dispatch(Client &c, const std::string &line)
 {

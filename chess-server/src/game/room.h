@@ -28,3 +28,8 @@ void beginGame(Room &r, Client &a, Client &b);
 
 // Tạo phòng cho a và b, bốc màu, gửi GAME_START cho cả hai
 void startGame(Client &a, Client &b, const std::string &source);
+
+// Kết thúc ván: tính Elo, lưu file, gửi GAME_OVER, hủy phòng.
+// winner = "" nghĩa là hòa. absentUser = người vừa ngắt kết nối (không gửi cho họ).
+void endGame(Room &r, const std::string &winner, const std::string &reason,
+             const std::string &absentUser = "");

@@ -1,6 +1,7 @@
 #include "cleanup.h"
 #include "matchmaker.h"
 #include "rooms.h"
+#include "game.h"
 
 void cleanupClient(Client &c)
 {
@@ -15,6 +16,9 @@ void cleanupClient(Client &c)
   case ConnState::ROOM_WAITING:
     closeRoom(c);
     break; // phòng của mình
+  case ConnState::IN_GAME:
+    forfeitOnDisconnect(c);
+    break; // ← THÊM
   default:
     break; // CONNECTED: không có gì; IN_GAME: làm ở bước kết thúc ván
   }
