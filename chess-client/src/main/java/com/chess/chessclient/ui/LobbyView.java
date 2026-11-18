@@ -8,6 +8,10 @@ import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.scene.control.ButtonBar;
+import javafx.stage.Modality;
+import java.util.HashMap;
+import java.util.Map;
 
 public class LobbyView implements Screen {
     private final ChessApp app;
@@ -18,6 +22,7 @@ public class LobbyView implements Screen {
     private final Label myRankLabel = new Label();
     private final Label header = new Label();
     private final Label status = new Label();
+    private final Map<String, Alert> inviteDialogs = new HashMap<>();   // mã phòng → hộp thoại
 
     private final Button findBtn = new Button("Tìm trận");
     private boolean searching = false;
@@ -70,11 +75,15 @@ public class LobbyView implements Screen {
 
         Button roomBtn = new Button("Tạo phòng");
         findBtn.setOnAction(e -> {
+            closeAllInvites();
             if (!searching) app.send("FIND_MATCH");
             else            app.send("CANCEL_MATCH");
             findBtn.setDisable(true);            // khóa tới khi server trả lời
         });
-        roomBtn.setDisable(true);   // C8
+        roomBtn.setOnAction(e -> {
+            closeAllInvites();
+            app.send("CREATE_ROOM");
+        });
         HBox bottom = new HBox(12, findBtn, roomBtn, status);
         bottom.setAlignment(Pos.CENTER);
         bottom.setPadding(new Insets(12));
@@ -84,6 +93,38 @@ public class LobbyView implements Screen {
         root.setBottom(bottom);
 
         refresh();     // vừa vào sảnh thì tải dữ liệu ngay
+    }
+
+    // Hiện hộp thoại mời (KHÔNG chặn cửa sổ, có thể hiện nhiều cái cùng lúc)
+    private void showInvite(Message msg) {
+        String host = msg.arg(0), rating = msg.arg(1), roomId = msg.arg(2);
+        ButtonType accept  = new ButtonType("Đồng ý", ButtonBar.ButtonData.YES);
+        ButtonType decline = new ButtonType("Từ chối", ButtonBar.ButtonData.NO);
+
+        Alert dlg = new Alert(Alert.AlertType.CONFIRMATION,
+                host + " (" + rating + ") mời bạn chơi một ván.", accept, decline);
+        dlg.setTitle("Lời mời – phòng " + roomId);
+        dlg.setHeaderText(null);
+        dlg.initModality(Modality.NONE);          // không chặn cửa sổ chính
+
+        dlg.setOnHidden(e -> {
+            // Nếu không còn trong map → đã bị chương trình đóng (INVITE_CANCELLED…) → không gửi gì
+            if (inviteDialogs.remove(roomId) == null) return;
+            if (dlg.getResult() == accept) app.send("ACCEPT_INVITE|" + roomId);
+            else                           app.send("DECLINE_INVITE|" + roomId);
+        });
+
+        inviteDialogs.put(roomId, dlg);
+        dlg.show();                               // show(), KHÔNG phải showAndWait()
+    }
+
+    // Đóng mọi hộp thoại mời mà không gửi gì (server tự hủy lời mời khi mình rời IDLE)
+    private void closeAllInvites() {
+        for (Alert dlg : inviteDialogs.values().toArray(new Alert[0])) {
+            inviteDialogs.clear();
+            dlg.close();
+        }
+        inviteDialogs.clear();
     }
 
     @Override
@@ -131,7 +172,26 @@ public class LobbyView implements Screen {
                 if (msg.isOk()) setSearching(false);             // 200
                 // 405 WRONG_STATE: vừa được ghép xong, GAME_START sắp tới → bỏ qua
             }
-            case "GAME_START" -> app.show(new GameView(app, msg));
+            case "CREATE_ROOM" -> {
+                if (msg.isOk()) app.show(new RoomView(app, msg.arg(0)));    // 201|CREATE_ROOM|R3
+            }
+            case "INVITED" -> showInvite(msg);                              // INVITED|host|rating|room
+            case "INVITE_CANCELLED" -> {                                    // INVITE_CANCELLED|room
+                Alert dlg = inviteDialogs.remove(msg.arg(0));               // XÓA khỏi map TRƯỚC...
+                if (dlg != null) dlg.close();                               // ...rồi mới đóng
+            }
+            case "ACCEPT_INVITE" -> {
+                if (!msg.isOk()) status.setText(switch (msg.arg(0)) {
+                    case "NO_SUCH_INVITE" -> "Lời mời không còn hiệu lực";
+                    case "ROOM_FULL"      -> "Phòng đã đủ người";
+                    default               -> "Lỗi: " + msg.arg(0);
+                });
+                // 200: chờ GAME_START
+            }
+            case "GAME_START" -> {
+                closeAllInvites();
+                app.show(new GameView(app, msg));
+            }
             default -> { }   // PING và các bản tin khác: bỏ qua
         }
     }
