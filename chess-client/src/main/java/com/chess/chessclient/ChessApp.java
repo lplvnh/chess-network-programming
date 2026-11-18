@@ -7,6 +7,9 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
 
 import java.io.IOException;
 
@@ -20,6 +23,20 @@ public class ChessApp extends Application {
     public String myUser;
     public int myRating;
     public String myMode;
+    private Timeline heartbeat;
+
+    // Gửi PING mỗi 15 giây (bắt đầu sau khi đăng nhập)
+    public void startHeartbeat() {
+        stopHeartbeat();
+        heartbeat = new Timeline(new KeyFrame(Duration.seconds(15), e -> send("PING")));
+        heartbeat.setCycleCount(Timeline.INDEFINITE);      // lặp mãi
+        heartbeat.play();
+    }
+
+    public void stopHeartbeat() {
+        if (heartbeat != null) heartbeat.stop();
+        heartbeat = null;
+    }
 
     @Override
     public void start(Stage stage) {
@@ -62,6 +79,7 @@ public class ChessApp extends Application {
 
     private void onDisconnected() {
         if (!connected) return;
+        stopHeartbeat();
         connected = false;
         conn.close();
         myUser = null;

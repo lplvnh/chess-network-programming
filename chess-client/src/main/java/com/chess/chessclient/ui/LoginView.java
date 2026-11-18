@@ -110,8 +110,8 @@ public class LoginView implements Screen {
                     app.myUser = msg.arg(0);
                     app.myRating = Integer.parseInt(msg.arg(1));
                     app.myMode = msg.arg(2);
-                    // C4 sẽ đổi dòng dưới thành: app.show(new LobbyView(app));
-                    showInfo("Đăng nhập thành công: " + app.myUser + " (" + app.myRating + ", " + app.myMode + ")");
+                    app.startHeartbeat();
+                    app.show(new LobbyView(app));
                 } else {
                     showError(errorText(msg));
                 }
