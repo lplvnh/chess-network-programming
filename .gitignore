@@ -3,3 +3,7 @@ chess-server/server
 *.log
 users.txt
 users.txt.tmp
+chess-client/target/
+chess-client/.idea/
+*.iml
+chess-server/chess_test
