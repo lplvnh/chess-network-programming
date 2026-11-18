@@ -18,7 +18,7 @@ static void sendGameStart(Client &me, const Room &r, const std::string &color,
 {
   int oppRating = g_users[opp].rating;
   sendMsg(me, "GAME_START|" + r.id + "|" + r.source + "|" + color + "|" +
-                  opp + "|" + std::to_string(oppRating) + "|" + r.fen);
+                  opp + "|" + std::to_string(oppRating) + "|" + toFen(r.pos));
 }
 
 std::string newRoomId()
@@ -30,7 +30,7 @@ std::string newRoomId()
 void beginGame(Room &r, Client &a, Client &b)
 {
   r.state = "PLAYING";
-  r.fen = START_FEN;
+  parseFen(START_FEN, r.pos);
 
   Client *white = &a;
   Client *black = &b;

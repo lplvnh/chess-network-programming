@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <ctime>
+#include "chess.h"
 
 // Thế cờ ban đầu theo chuẩn FEN
 const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -16,7 +17,7 @@ struct Room
   std::string host;                      // ← THÊM: chủ phòng (chỉ có với source ROOM)
   std::string white;                     // tên người cầm trắng
   std::string black;                     // tên người cầm đen
-  std::string fen;                       // thế cờ hiện tại
+  Position pos;                          // thế cờ hiện tại
   std::map<std::string, time_t> invites; // ← THÊM: tên người được mời → hạn chót
 };
 

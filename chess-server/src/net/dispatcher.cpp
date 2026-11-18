@@ -3,6 +3,7 @@
 #include "lobby.h"
 #include "matchmaker.h"
 #include "rooms.h"
+#include "game.h"
 #include <vector>
 #include <functional>
 #include "auth.h"
@@ -74,6 +75,7 @@ static const std::map<std::string, Command> COMMANDS = {
     {"LEAVE_ROOM", {handleLeaveRoom, {S::ROOM_WAITING}}},
     {"ACCEPT_INVITE", {handleAcceptInvite, {S::IDLE}}},
     {"DECLINE_INVITE", {handleDeclineInvite, {S::IDLE}}},
+    {"MOVE", {handleMove, {S::IN_GAME}}},
 };
 void dispatch(Client &c, const std::string &line)
 {
