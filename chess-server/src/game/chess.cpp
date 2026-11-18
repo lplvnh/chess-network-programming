@@ -264,6 +264,21 @@ static void slide(const Position &p, std::vector<Move> &moves, int from, const i
   }
 }
 
+// Thêm nước đi của tốt; nếu tới hàng cuối thì thêm 4 lựa chọn phong cấp
+static void addPawnMove(std::vector<Move> &moves, int from, int to)
+{
+  int r = rowOf(to);
+  if (r == 0 || r == 7)
+  {
+    for (char promo : {'q', 'r', 'b', 'n'})
+      moves.push_back({from, to, promo});
+  }
+  else
+  {
+    moves.push_back({from, to, 0});
+  }
+}
+
 // Mọi nước đi "theo hình dạng" của bên đang tới lượt (chưa xét vua bị chiếu)
 static std::vector<Move> pseudoMoves(const Position &p)
 {
@@ -285,7 +300,7 @@ static std::vector<Move> pseudoMoves(const Position &p)
       // Tiến 1 ô (ô phía trước phải trống)
       if (onBoard(r + dir, c) && p.board[sqOf(r + dir, c)] == '.')
       {
-        moves.push_back({from, sqOf(r + dir, c), 0});
+        addPawnMove(moves, from, sqOf(r + dir, c));
         // Tiến 2 ô: chỉ từ hàng xuất phát, và ô thứ 2 cũng trống
         if (r == startRow && p.board[sqOf(r + 2 * dir, c)] == '.')
           moves.push_back({from, sqOf(r + 2 * dir, c), 0});
@@ -296,8 +311,8 @@ static std::vector<Move> pseudoMoves(const Position &p)
         if (!onBoard(r + dir, c + dc))
           continue;
         int to = sqOf(r + dir, c + dc);
-        if (colorOf(p.board[to]) == other(me))
-          moves.push_back({from, to, 0});
+        if (colorOf(p.board[to]) == other(me) || to == p.ep)
+          addPawnMove(moves, from, to);
       }
       break;
     }
@@ -326,7 +341,22 @@ static std::vector<Move> pseudoMoves(const Position &p)
         if (onBoard(rr, cc) && colorOf(p.board[sqOf(rr, cc)]) != me)
           moves.push_back({from, sqOf(rr, cc), 0});
       }
-      // (bước 6.4: nhập thành)
+      int home = (me == 'w') ? 60 : 4; // e1 = 60, e8 = 4
+      int kRight = (me == 'w') ? WK : BK;
+      int qRight = (me == 'w') ? WQ : BQ;
+      char opp = other(me);
+      if (from == home && !squareAttacked(p, home, opp))
+      { // vua ở nhà, không bị chiếu
+        // Cánh vua: f, g trống và không bị tấn công
+        if (p.castle[kRight] && p.board[home + 1] == '.' && p.board[home + 2] == '.' &&
+            !squareAttacked(p, home + 1, opp) && !squareAttacked(p, home + 2, opp))
+          moves.push_back({from, home + 2, 0});
+        // Cánh hậu: d, c, b trống; d, c không bị tấn công
+        if (p.castle[qRight] && p.board[home - 1] == '.' && p.board[home - 2] == '.' &&
+            p.board[home - 3] == '.' &&
+            !squareAttacked(p, home - 1, opp) && !squareAttacked(p, home - 2, opp))
+          moves.push_back({from, home - 2, 0});
+      }
       break;
     }
   }
@@ -344,8 +374,52 @@ Position makeMove(const Position &p, const Move &m)
   n.board[m.to] = piece;
   n.board[m.from] = '.';
 
-  // (bước 6.4: bắt tốt qua đường, phong cấp, nhập thành, quyền nhập thành, ô ep)
+  // Bắt tốt qua đường: tốt bị ăn nằm CÙNG HÀNG với ô xuất phát, CÙNG CỘT với ô đích
+  if (isPawn && m.to == p.ep)
+    n.board[sqOf(rowOf(m.from), colOf(m.to))] = '.';
+
+  // Phong cấp: thay tốt bằng quân mới, đúng màu
+  if (m.promo)
+    n.board[m.to] = (p.side == 'w') ? toupper(m.promo) : m.promo;
+
+  // Nhập thành: vua đi 2 cột → chuyển luôn xe
+  bool isKing = tolower((unsigned char)piece) == 'k';
+  if (isKing && colOf(m.to) - colOf(m.from) == 2)
+  { // cánh vua: xe h → f
+    n.board[m.to - 1] = n.board[m.to + 1];
+    n.board[m.to + 1] = '.';
+  }
+  if (isKing && colOf(m.from) - colOf(m.to) == 2)
+  { // cánh hậu: xe a → d
+    n.board[m.to + 1] = n.board[m.to - 2];
+    n.board[m.to - 2] = '.';
+  }
+
+  // Cập nhật quyền nhập thành: có quân rời hoặc bị ăn tại ô vua/xe ban đầu → mất quyền
+  for (int sq : {m.from, m.to})
+  {
+    if (sq == 60)
+    {
+      n.castle[WK] = n.castle[WQ] = false;
+    } // e1: vua trắng
+    if (sq == 4)
+    {
+      n.castle[BK] = n.castle[BQ] = false;
+    } // e8: vua đen
+    if (sq == 63)
+      n.castle[WK] = false; // h1
+    if (sq == 56)
+      n.castle[WQ] = false; // a1
+    if (sq == 7)
+      n.castle[BK] = false; // h8
+    if (sq == 0)
+      n.castle[BQ] = false; // a8
+  }
+
+  // Ô bắt qua đường: chỉ có ngay sau khi một tốt đi 2 ô
   n.ep = -1;
+  if (isPawn && abs(rowOf(m.to) - rowOf(m.from)) == 2)
+    n.ep = (m.from + m.to) / 2; // ô ở giữa
 
   // 2. Đồng hồ 50 nước
   n.halfmove = (isPawn || captured != '.') ? 0 : p.halfmove + 1;
