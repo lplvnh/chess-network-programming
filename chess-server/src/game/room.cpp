@@ -34,6 +34,8 @@ void beginGame(Room &r, Client &a, Client &b)
   r.state = "PLAYING";
   parseFen(START_FEN, r.pos);
 
+  r.seen[positionKey(r.pos)] = 1; // thế cờ ban đầu = lần thứ nhất
+
   Client *white = &a;
   Client *black = &b;
   if (coinFlip())

@@ -18,6 +18,7 @@ struct Room
   std::string white;                     // tên người cầm trắng
   std::string black;                     // tên người cầm đen
   Position pos;                          // thế cờ hiện tại
+  std::map<std::string, int> seen;       // positionKey → số lần xuất hiện
   std::map<std::string, time_t> invites; // ← THÊM: tên người được mời → hạn chót
 };
 

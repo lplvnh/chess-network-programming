@@ -22,6 +22,25 @@ static std::string opponentOf(const Room &r, const std::string &user)
   return user == r.white ? r.black : r.white;
 }
 
+// Gọi sau mỗi nước đi hợp lệ của 'mover'
+static void checkGameEnd(Room &r, const std::string &mover)
+{
+  const Position &p = r.pos; // p.side = bên SẮP đi
+  if (legalMoves(p).empty())
+  {
+    if (inCheck(p, p.side))
+      endGame(r, mover, "CHECKMATE"); // người vừa đi thắng
+    else
+      endGame(r, "", "STALEMATE");
+  }
+  else if (insufficientMaterial(p))
+    endGame(r, "", "INSUFFICIENT_MATERIAL");
+  else if (p.halfmove >= 100)
+    endGame(r, "", "FIFTY_MOVE");
+  else if (r.seen[positionKey(p)] >= 3)
+    endGame(r, "", "THREEFOLD_REPETITION");
+}
+
 void handleMove(Client &c, const std::vector<std::string> &f)
 {
   Room &r = rooms[c.roomId];
@@ -61,6 +80,7 @@ void handleMove(Client &c, const std::vector<std::string> &f)
 
   // 4. Đi quân, rồi báo cho cả hai
   r.pos = makeMove(r.pos, chosen);
+  r.seen[positionKey(r.pos)]++; // đếm thế cờ mới
 
   std::string flag = inCheck(r.pos, r.pos.side) ? "CHECK" : "NONE"; // bên SẮP đi có bị chiếu?
   std::string fen = toFen(r.pos);
@@ -71,7 +91,7 @@ void handleMove(Client &c, const std::vector<std::string> &f)
   if (opp)
     sendMsg(*opp, "OPP_MOVE|" + uci + "|" + flag + "|" + fen);
 
-  // (bước 7: kiểm tra chiếu hết / hòa → GAME_OVER)
+  checkGameEnd(r, c.user); // SAU khi đã gửi 200 và OPP_MOVE
 }
 
 void handleResign(Client &c, const std::vector<std::string> &f)

@@ -35,3 +35,6 @@ std::vector<Move> legalMoves(const Position &p);             // mọi nước đ
 
 Position makeMove(const Position &p, const Move &m); // trả về thế cờ SAU khi đi
 long long perft(const Position &p, int depth);       // đếm để test
+
+bool insufficientMaterial(const Position &p); // không đủ quân chiếu hết?
+std::string positionKey(const Position &p);   // 4 phần đầu FEN (dùng cho lặp 3 lần)

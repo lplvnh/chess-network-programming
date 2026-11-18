@@ -454,3 +454,28 @@ long long perft(const Position &p, int depth)
     total += perft(makeMove(p, m), depth - 1); // đệ quy: thử từng nước, đếm tiếp
   return total;
 }
+
+bool insufficientMaterial(const Position &p)
+{
+  int minors = 0; // số tượng + mã
+  for (int sq = 0; sq < 64; sq++)
+  {
+    char piece = tolower((unsigned char)p.board[sq]);
+    if (piece == 'p' || piece == 'r' || piece == 'q')
+      return false; // còn quân "nặng" → đủ
+    if (piece == 'b' || piece == 'n')
+      minors++;
+  }
+  return minors <= 1;
+}
+
+// "rnbqkbnr/... w KQkq - 0 1"  →  "rnbqkbnr/... w KQkq -"
+std::string positionKey(const Position &p)
+{
+  std::string fen = toFen(p);
+  int spaces = 0;
+  for (size_t i = 0; i < fen.size(); i++)
+    if (fen[i] == ' ' && ++spaces == 4)
+      return fen.substr(0, i); // cắt tại dấu cách thứ 4
+  return fen;
+}

@@ -70,5 +70,22 @@ int main()
 
   // 7. Nhìn tận mắt: nhập thành
   listMoves("Castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1");
+
+  // 8. Thiếu quân
+  const char *mat[] = {
+      "8/8/4k3/8/8/4K3/8/8 w - - 0 1",    // Vua - Vua            → 1
+      "8/8/4k3/8/8/4K3/5B2/8 w - - 0 1",  // Vua+Tượng - Vua      → 1
+      "8/8/4k3/8/8/4K3/5N2/8 w - - 0 1",  // Vua+Mã - Vua         → 1
+      "8/8/4k3/8/8/4K3/4BB2/8 w - - 0 1", // Vua+2 Tượng - Vua    → 0
+      "8/8/4k3/8/8/4K3/4P3/8 w - - 0 1",  // Vua+Tốt - Vua        → 0
+  };
+  printf("insufficient: ");
+  for (const char *f : mat)
+  {
+    parseFen(f, p);
+    printf("%d ", insufficientMaterial(p));
+  }
+  printf("(expect 1 1 1 0 0)\n");
+  printf("key: %s\n", positionKey(p).c_str()); // không còn "0 1" ở cuối
   return 0;
 }
