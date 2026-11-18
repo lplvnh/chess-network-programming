@@ -15,4 +15,8 @@ build/%.o: src/%.cpp
 clean:
 	rm -rf build server server.log
 
+test: tests/chess_test.cpp src/game/chess.cpp
+	$(CXX) -std=c++17 -Wall -Wextra -O2 -Isrc/game -o chess_test $^
+	./chess_test
+
 .PHONY: clean
