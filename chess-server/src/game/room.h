@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <ctime>
+#include <set>
 #include "chess.h"
 
 // Thế cờ ban đầu theo chuẩn FEN
@@ -11,15 +12,17 @@ const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk
 
 struct Room
 {
-  std::string id;                        // "R1", "R2"...
-  std::string source;                    // RANDOM / RANKED / ROOM: ván được tạo bằng cách nào
-  std::string state;                     // ← THÊM: "WAITING" hoặc "PLAYING"
-  std::string host;                      // ← THÊM: chủ phòng (chỉ có với source ROOM)
-  std::string white;                     // tên người cầm trắng
-  std::string black;                     // tên người cầm đen
-  Position pos;                          // thế cờ hiện tại
-  std::map<std::string, int> seen;       // positionKey → số lần xuất hiện
-  std::map<std::string, time_t> invites; // ← THÊM: tên người được mời → hạn chót
+  std::string id;                            // "R1", "R2"...
+  std::string source;                        // RANDOM / RANKED / ROOM: ván được tạo bằng cách nào
+  std::string state;                         // ← THÊM: "WAITING" hoặc "PLAYING"
+  std::string host;                          // ← THÊM: chủ phòng (chỉ có với source ROOM)
+  std::string white;                         // tên người cầm trắng
+  std::string black;                         // tên người cầm đen
+  Position pos;                              // thế cờ hiện tại
+  std::map<std::string, int> seen;           // positionKey → số lần xuất hiện
+  std::string drawOfferBy;                   // ai đang đề nghị hòa ("" = không ai)
+  std::set<std::string> mustMoveBeforeOffer; // ai phải đi quân trước khi được đề nghị lại
+  std::map<std::string, time_t> invites;     // ← THÊM: tên người được mời → hạn chót
 };
 
 extern std::map<std::string, Room> rooms; // mã phòng → Room

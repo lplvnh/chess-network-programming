@@ -80,7 +80,8 @@ void handleMove(Client &c, const std::vector<std::string> &f)
 
   // 4. Đi quân, rồi báo cho cả hai
   r.pos = makeMove(r.pos, chosen);
-  r.seen[positionKey(r.pos)]++; // đếm thế cờ mới
+  r.seen[positionKey(r.pos)]++;        // đếm thế cờ mới
+  r.mustMoveBeforeOffer.erase(c.user); // đã đi thêm nước → được đề nghị hòa lại
 
   std::string flag = inCheck(r.pos, r.pos.side) ? "CHECK" : "NONE"; // bên SẮP đi có bị chiếu?
   std::string fen = toFen(r.pos);
@@ -90,6 +91,14 @@ void handleMove(Client &c, const std::vector<std::string> &f)
   Client *opp = findByUser(oppName);
   if (opp)
     sendMsg(*opp, "OPP_MOVE|" + uci + "|" + flag + "|" + fen);
+
+  // Đối thủ đang đề nghị hòa mà mình đi quân → coi như từ chối
+  if (r.drawOfferBy == oppName)
+  {
+    r.drawOfferBy.clear();
+    if (opp)
+      sendMsg(*opp, "DRAW_DECLINED");
+  }
 
   checkGameEnd(r, c.user); // SAU khi đã gửi 200 và OPP_MOVE
 }
@@ -110,4 +119,70 @@ void forfeitOnDisconnect(Client &c)
 {
   Room &r = rooms[c.roomId];
   endGame(r, opponentOf(r, c.user), "DISCONNECT", c.user); // không gửi cho c
+}
+
+void handleOfferDraw(Client &c, const std::vector<std::string> &f)
+{
+  if (f.size() != 1)
+  {
+    sendMsg(c, "400|OFFER_DRAW|BAD_FORMAT");
+    return;
+  }
+  Room &r = rooms[c.roomId];
+  if (!r.drawOfferBy.empty())
+  { // đã có lời đề nghị đang chờ
+    sendMsg(c, "405|OFFER_DRAW|ALREADY_PENDING");
+    return;
+  }
+  if (r.mustMoveBeforeOffer.count(c.user))
+  { // chưa đi thêm nước nào kể từ lần trước
+    sendMsg(c, "405|OFFER_DRAW|WAIT_YOUR_MOVE");
+    return;
+  }
+  r.drawOfferBy = c.user;
+  r.mustMoveBeforeOffer.insert(c.user);
+  sendMsg(c, "200|OFFER_DRAW");
+
+  Client *opp = findByUser(opponentOf(r, c.user));
+  if (opp)
+    sendMsg(*opp, "DRAW_OFFERED");
+}
+
+void handleAcceptDraw(Client &c, const std::vector<std::string> &f)
+{
+  if (f.size() != 1)
+  {
+    sendMsg(c, "400|ACCEPT_DRAW|BAD_FORMAT");
+    return;
+  }
+  Room &r = rooms[c.roomId];
+  if (r.drawOfferBy != opponentOf(r, c.user))
+  { // phải là ĐỐI THỦ đề nghị
+    sendMsg(c, "404|ACCEPT_DRAW|NO_OFFER");
+    return;
+  }
+  sendMsg(c, "200|ACCEPT_DRAW");
+  endGame(r, "", "DRAW_AGREED"); // hòa, dùng lại endGame của 7.1
+}
+
+void handleDeclineDraw(Client &c, const std::vector<std::string> &f)
+{
+  if (f.size() != 1)
+  {
+    sendMsg(c, "400|DECLINE_DRAW|BAD_FORMAT");
+    return;
+  }
+  Room &r = rooms[c.roomId];
+  std::string offerer = opponentOf(r, c.user);
+  if (r.drawOfferBy != offerer)
+  {
+    sendMsg(c, "404|DECLINE_DRAW|NO_OFFER");
+    return;
+  }
+  r.drawOfferBy.clear();
+  sendMsg(c, "200|DECLINE_DRAW");
+
+  Client *opp = findByUser(offerer);
+  if (opp)
+    sendMsg(*opp, "DRAW_DECLINED");
 }

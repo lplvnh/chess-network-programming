@@ -7,3 +7,6 @@
 void handleMove(Client &c, const std::vector<std::string> &f);
 void handleResign(Client &c, const std::vector<std::string> &f);
 void forfeitOnDisconnect(Client &c);
+void handleOfferDraw(Client &c, const std::vector<std::string> &f);
+void handleAcceptDraw(Client &c, const std::vector<std::string> &f);
+void handleDeclineDraw(Client &c, const std::vector<std::string> &f);
