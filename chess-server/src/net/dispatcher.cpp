@@ -27,21 +27,6 @@ static Fields splitFields(const std::string &line)
   return fields;
 }
 
-// Tạo bản sao của dòng để GHI LOG, với mật khẩu đã che bằng ***
-static std::string maskForLog(const std::string &line)
-{
-  Fields f = splitFields(line);
-  if ((f[0] == "LOGIN" || f[0] == "REGISTER") && f.size() >= 3)
-  {
-    f[2] = "***"; // trường 2 = mật khẩu
-    std::string out = f[0];
-    for (size_t i = 1; i < f.size(); i++)
-      out += "|" + f[i]; // nối lại bằng '|'
-    return out;
-  }
-  return line; // lệnh khác → giữ nguyên
-}
-
 static void handlePing(Client &c, const Fields &)
 { // bỏ tên "f" vì không dùng → hết cảnh báo
   sendMsg(c, "200|PING");
@@ -81,11 +66,17 @@ static const std::map<std::string, Command> COMMANDS = {
     {"ACCEPT_DRAW", {handleAcceptDraw, {S::IN_GAME}}},
     {"DECLINE_DRAW", {handleDeclineDraw, {S::IN_GAME}}},
 };
+// line: bản tin đã bỏ ký tự kết thúc. Log RECV nguyên văn đã được ghi trong main.cpp
+// ngay khi framer tách được bản tin, trước khi gọi hàm này.
 void dispatch(Client &c, const std::string &line)
 {
-  logMsg("RECV", c, maskForLog(line));
+  // (Dòng quá 512 byte đã bị Framer chặn trước khi tới đây: LINE_TOO_LONG.)
+  // Dòng rỗng không có tên lệnh, nhưng server không bao giờ im lặng → báo lệnh không tồn tại
   if (line.empty())
+  {
+    sendMsg(c, "400|ERROR|UNKNOWN_COMMAND");
     return;
+  }
 
   Fields f = splitFields(line);
   const std::string &cmd = f[0];
@@ -109,6 +100,14 @@ void dispatch(Client &c, const std::string &line)
     return;
   }
 
-  // 3 + 4. Hợp lệ → gọi handler (handler tự kiểm tra định dạng)
+  // 3. Cú pháp chung: field cần ít nhất 1 ký tự (ví dụ LOGIN|alice||RANKED → BAD_FORMAT)
+  for (size_t i = 1; i < f.size(); i++)
+    if (f[i].empty())
+    {
+      sendMsg(c, "400|" + cmd + "|BAD_FORMAT");
+      return;
+    }
+
+  // 4. Hợp lệ → gọi handler (handler tự kiểm tra số trường, định dạng riêng)
   command.handler(c, f);
 }

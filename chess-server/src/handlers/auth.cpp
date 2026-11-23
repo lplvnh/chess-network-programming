@@ -62,9 +62,14 @@ void handleRegister(Client &c, const std::vector<std::string> &f)
 void handleLogin(Client &c, const std::vector<std::string> &f)
 {
   // 1. Định dạng: LOGIN|user|pass|mode
-  if (f.size() != 4 || (f[3] != "RANDOM" && f[3] != "RANKED"))
+  if (f.size() != 4)
   {
     sendMsg(c, "400|LOGIN|BAD_FORMAT");
+    return;
+  }
+  if (f[3] != "RANDOM" && f[3] != "RANKED") // mode sai có mã lỗi riêng (mục 5.3)
+  {
+    sendMsg(c, "400|LOGIN|BAD_MODE");
     return;
   }
   const std::string &name = f[1];

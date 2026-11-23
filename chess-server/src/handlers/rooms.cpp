@@ -2,7 +2,7 @@
 #include "room.h"
 #include "store.h"
 
-const int INVITE_SECONDS = 20; // lời mời sống 60 giây
+const int INVITE_SECONDS = 20; // lời mời sống 20 giây
 
 void handleCreateRoom(Client &c, const std::vector<std::string> &f)
 {
@@ -50,7 +50,7 @@ void handleInvite(Client &c, const std::vector<std::string> &f)
   }
 
   Room &r = rooms[c.roomId];
-  r.invites[target] = time(nullptr) + INVITE_SECONDS; // mời lại = gia hạn thêm 60 giây
+  r.invites[target] = time(nullptr) + INVITE_SECONDS; // mời lại = gia hạn thêm 20 giây
   sendMsg(c, "200|INVITE|" + target);
   sendMsg(*t, "INVITED|" + c.user + "|" +
                   std::to_string(g_users[c.user].rating) + "|" + r.id);
@@ -102,21 +102,21 @@ void handleAcceptInvite(Client &c, const std::vector<std::string> &f)
     sendMsg(c, "400|ACCEPT_INVITE|BAD_FORMAT");
     return;
   }
-  // 1. Có phòng này và phòng có mời mình không?
   auto it = rooms.find(f[1]);
+
+  // 1. Đã được mời nhưng người khác vào trước (ACCEPT đến sau INVITE_CANCELLED) → phòng đã đủ
+  if (it != rooms.end() && it->second.lateInvitees.count(c.user))
+  {
+    sendMsg(c, "410|ACCEPT_INVITE|ROOM_FULL");
+    return;
+  }
+  // 2. Có phòng này và phòng có mời mình không?
   if (it == rooms.end() || it->second.invites.count(c.user) == 0)
   {
     sendMsg(c, "404|ACCEPT_INVITE|NO_SUCH_INVITE");
     return;
   }
   Room &r = it->second;
-
-  // 2. Phòng còn chờ không?
-  if (r.state != "WAITING")
-  {
-    sendMsg(c, "410|ACCEPT_INVITE|ROOM_FULL");
-    return;
-  }
 
   // 3. Dọn lời mời
   r.invites.erase(c.user); // lời mời của chính mình
@@ -126,6 +126,7 @@ void handleAcceptInvite(Client &c, const std::vector<std::string> &f)
     Client *other = findByUser(name); // ① người khác được mời vào phòng này
     if (other)
       sendMsg(*other, "INVITE_CANCELLED|" + r.id);
+    r.lateInvitees.insert(name); // nếu họ vẫn kịp gửi ACCEPT_INVITE → 410 ROOM_FULL
   }
   r.invites.clear();
 
