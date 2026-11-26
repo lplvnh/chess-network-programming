@@ -19,6 +19,7 @@ struct Client
   int fd;
   std::string addr;
   std::string buffer;
+  bool skipping = false;                  // đang bỏ phần đuôi của một dòng quá 512 byte
   std::string user;                       // ← MỚI: rỗng = chưa đăng nhập
   std::string mode;                       // ← MỚI: "RANDOM" hoặc "RANKED"
   ConnState state = ConnState::CONNECTED; // ← MỚI

@@ -53,6 +53,11 @@ public class ChessApp extends Application {
         else stage.getScene().setRoot(screen.root());
     }
 
+    // Màn hình này có đang hiển thị không (dùng khi hộp thoại đóng muộn, sau khi đã đổi màn hình)
+    public boolean isShowing(Screen screen) {
+        return current == screen;
+    }
+
     // Kết nối nếu chưa kết nối. Trả false nếu không tới được server
     public boolean ensureConnected(String host) {
         if (connected) return true;

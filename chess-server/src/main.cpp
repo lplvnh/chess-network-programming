@@ -23,7 +23,7 @@ const int HEARTBEAT_TIMEOUT = 45;
 // Ngắt client c: ghi log, dọn dẹp theo trạng thái, đóng socket, đánh dấu để xóa
 static void dropClient(Client &c, const std::string &reason, std::vector<int> &closed)
 {
-  logMsg("DISC", c, "reason=" + reason);
+  logEvent("DISC", c, "reason=" + reason);
   cleanupClient(c);
   c.user.clear(); // để findByUser không tìm thấy client sắp xóa này nữa
   close(c.fd);
@@ -79,7 +79,7 @@ int main()
       c.lastSeen = time(nullptr);
       c.addr = std::string(inet_ntoa(ca.sin_addr)) + ":" + std::to_string(ntohs(ca.sin_port));
       clients[fd] = c;
-      logMsg("CONN", clients[fd], "connected");
+      logEvent("CONN", clients[fd], "connected");
     }
 
     // 4. Client nào sẵn sàng thì đọc client đó
@@ -99,11 +99,20 @@ int main()
       c.lastSeen = time(nullptr); // ← có dữ liệu = còn sống
       c.buffer.append(buf, r);
 
-      bool tooLong;
-      for (const std::string &line : extractLines(c.buffer, tooLong))
-        dispatch(c, line); // tên mới của handleLine (xem 1.6e)
-      if (tooLong)
-        sendMsg(c, "400|ERROR|LINE_TOO_LONG");
+      for (const Frame &fr : extractFrames(c.buffer, c.skipping))
+      {
+        if (fr.kind == FrameKind::MESSAGE)
+        {
+          logMsg("RECV", c, fr.raw);           // in NGAY khi nhận đủ một bản tin, nguyên văn
+          dispatch(c, stripTerminator(fr.raw)); // rồi mới xử lý
+        }
+        else
+        {
+          logMsg("DROP", c, fr.raw); // byte bị bỏ vì dòng quá 512 byte (vẫn in đủ)
+          if (fr.kind == FrameKind::TOO_LONG)
+            sendMsg(c, "400|ERROR|LINE_TOO_LONG");
+        }
+      }
     }
 
     // Heartbeat: ai đã đăng nhập mà im lặng quá lâu thì coi như ngắt

@@ -11,6 +11,8 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.control.ButtonType;
+import java.util.ArrayList;
+import java.util.List;
 
 public class GameView implements Screen {
     private final ChessApp app;
@@ -21,6 +23,12 @@ public class GameView implements Screen {
     private final Label turnLabel = new Label();
     private final Label status = new Label();
     private final HBox drawOfferBar = new HBox(8);    // thanh "Đối thủ đề nghị hòa"
+
+    // Sau GAME_OVER server đã đưa mình về IDLE (sảnh), nhưng màn hình vẫn giữ thế cờ cuối
+    // cho tới khi đóng hộp thoại kết quả. Bản tin đến trong lúc đó (ví dụ INVITED) thuộc về
+    // sảnh nên được giữ lại rồi chuyển cho LobbyView, không bị bỏ mất.
+    private boolean over = false;
+    private final List<Message> pending = new ArrayList<>();
 
     // msg = GAME_START|room_id|source|color|opp|opp_rating|fen
     public GameView(ChessApp app, Message msg) {
@@ -57,7 +65,8 @@ public class GameView implements Screen {
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                     "Bạn chắc chắn muốn xin thua?", ButtonType.YES, ButtonType.NO);
             confirm.setHeaderText(null);
-            if (confirm.showAndWait().orElse(ButtonType.NO) == ButtonType.YES)
+            // !over: trong lúc hộp thoại mở, ván có thể đã kết thúc (bị chiếu hết...) → không gửi
+            if (confirm.showAndWait().orElse(ButtonType.NO) == ButtonType.YES && !over)
                 app.send("RESIGN");
         });
 
@@ -108,6 +117,7 @@ public class GameView implements Screen {
 
     @Override
     public void onMessage(Message msg) {
+        if (over) { pending.add(msg); return; }       // ván đã xong: để dành cho sảnh
         switch (msg.command()) {
             case "MOVE" -> {
                 if (msg.isOk()) {                         // 200|MOVE|uci|flag|fen
@@ -170,7 +180,16 @@ public class GameView implements Screen {
         alert.setHeaderText(result);
         alert.setContentText(reasonText(msg.arg(1))
                 + "\n\nRating mới: " + msg.arg(2) + " (" + msg.arg(3) + ")");
-        alert.showAndWait();
-        app.show(new LobbyView(app));
+        // show() thay vì showAndWait(): không chặn trong lúc chờ người dùng đóng hộp thoại,
+        // các bản tin đến sau vẫn được nhận và để dành trong 'pending'
+        alert.setOnHidden(e -> {
+            if (!app.isShowing(this)) return;    // đã mất kết nối → đang ở màn hình đăng nhập
+            LobbyView lobby = new LobbyView(app);
+            app.show(lobby);
+            for (Message m : pending) lobby.onMessage(m);   // đúng thứ tự đã nhận
+            pending.clear();
+        });
+        over = true;
+        alert.show();
     }
 }

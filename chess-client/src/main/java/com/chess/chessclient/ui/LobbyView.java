@@ -10,6 +10,10 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.control.ButtonBar;
 import javafx.stage.Modality;
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -26,6 +30,8 @@ public class LobbyView implements Screen {
 
     private final Button findBtn = new Button("Tìm trận");
     private boolean searching = false;
+    private Timeline waitTimer;        // cập nhật "đã chờ n giây" mỗi giây khi đang tìm trận
+    private long searchStart;          // thời điểm nhận 202 FIND_MATCH (mili giây)
 
     public LobbyView(ChessApp app) {
         this.app = app;
@@ -138,7 +144,24 @@ public class LobbyView implements Screen {
     private void setSearching(boolean on) {
         searching = on;
         findBtn.setText(on ? "Hủy tìm trận" : "Tìm trận");
-        status.setText(on ? "Đang tìm đối thủ (" + app.myMode + ")..." : "");
+        if (waitTimer != null) { waitTimer.stop(); waitTimer = null; }
+        if (!on) { status.setText(""); return; }
+        // Hiện thời gian đã chờ (design UC7): với RANKED, chờ càng lâu khoảng rating càng nới
+        searchStart = System.currentTimeMillis();
+        updateSearchStatus();
+        waitTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> updateSearchStatus()));
+        waitTimer.setCycleCount(Animation.INDEFINITE);
+        waitTimer.play();
+    }
+
+    private void updateSearchStatus() {
+        if (!app.isShowing(this)) {        // đã rời sảnh (mất kết nối...) → dừng đồng hồ
+            if (waitTimer != null) waitTimer.stop();
+            return;
+        }
+        long seconds = (System.currentTimeMillis() - searchStart) / 1000;
+        String what = "RANKED".equals(app.myMode) ? "Đang tìm đối thủ cùng trình độ" : "Đang tìm đối thủ";
+        status.setText(what + " · đã chờ " + seconds + " giây");
     }
 
     @Override
@@ -157,6 +180,7 @@ public class LobbyView implements Screen {
             }
             case "LOGOUT" -> {
                 if (msg.isOk()) {
+                    setSearching(false);
                     app.stopHeartbeat();
                     app.myUser = null;
                     app.show(new LoginView(app, ""));
@@ -174,6 +198,7 @@ public class LobbyView implements Screen {
             }
             case "CREATE_ROOM" -> {
                 if (msg.isOk()) app.show(new RoomView(app, msg.arg(0)));    // 201|CREATE_ROOM|R3
+                else status.setText("Không tạo được phòng: " + msg.arg(0));
             }
             case "INVITED" -> showInvite(msg);                              // INVITED|host|rating|room
             case "INVITE_CANCELLED" -> {                                    // INVITE_CANCELLED|room
@@ -189,6 +214,7 @@ public class LobbyView implements Screen {
                 // 200: chờ GAME_START
             }
             case "GAME_START" -> {
+                setSearching(false);
                 closeAllInvites();
                 app.show(new GameView(app, msg));
             }

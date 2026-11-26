@@ -18,22 +18,24 @@ static bool sendAll(int fd, const std::string &data)
   return true;
 }
 
+// Ghép '\n' TRƯỚC, log đúng chuỗi byte sắp gửi, rồi mới gửi
 void sendMsg(Client &c, const std::string &msg)
 {
-  logMsg("SEND", c, msg);
-  sendAll(c.fd, msg + "\n");
+  std::string data = msg + "\n";
+  logMsg("SEND", c, data);
+  sendAll(c.fd, data);
 }
 
-// Gửi nhiều dòng trong MỘT lần sendAll. Log từng dòng riêng cho dễ đọc
+// Response nhiều dòng (200|LIST_ONLINE|n, 200|LEADERBOARD|k...): theo cú pháp
+// response = response-line *data-line, cả khối là MỘT bản tin, nên được ghép đủ,
+// log MỘT lần đúng chuỗi byte sắp gửi, rồi gửi trong một lần sendAll
 void sendBlock(Client &c, const std::vector<std::string> &lines)
 {
   std::string data;
   for (const std::string &line : lines)
-  {
-    logMsg("SEND", c, line);
-    data += line + "\n"; // ghép tất cả thành 1 chuỗi
-  }
-  sendAll(c.fd, data); // gửi một lần
+    data += line + "\n";
+  logMsg("SEND", c, data);
+  sendAll(c.fd, data);
 }
 
 // Trả về con trỏ tới client đang đăng nhập bằng 'name', hoặc nullptr nếu không ai

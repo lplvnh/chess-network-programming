@@ -23,6 +23,7 @@ struct Room
   std::string drawOfferBy;                   // ai đang đề nghị hòa ("" = không ai)
   std::set<std::string> mustMoveBeforeOffer; // ai phải đi quân trước khi được đề nghị lại
   std::map<std::string, time_t> invites;     // ← THÊM: tên người được mời → hạn chót
+  std::set<std::string> lateInvitees;        // được mời nhưng phòng đã đủ người → 410 ROOM_FULL
 };
 
 extern std::map<std::string, Room> rooms; // mã phòng → Room
